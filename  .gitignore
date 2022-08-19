@@ -1,0 +1,11 @@
+# Mac
+**/.DS_Store
+
+# 日志文件
+logs
+
+# vscode
+.vscode/*.log
+
+# 测试文件
+tmp

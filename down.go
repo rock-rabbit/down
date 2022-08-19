@@ -180,8 +180,12 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 	// 生成 Hook
 	ins.hooks = make([]Hook, len(ins.down.PerHooks))
 	stat := &Stat{Down: ins.down, Meta: ins.meta}
+	var err error
 	for idx, perhook := range ins.down.PerHooks {
-		ins.hooks[idx] = perhook.Make(stat)
+		ins.hooks[idx], err = perhook.Make(stat)
+		if err != nil {
+			return fmt.Errorf("down Hook: %s", err)
+		}
 	}
 	// 初始化操作
 	ins.init()
@@ -195,7 +199,7 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 	if outputName == "" {
 		outputName = ins.filename
 	}
-	outputPath, err := filepath.Abs(filepath.Join(meta.OutputDir, outputName))
+	outputPath, err = filepath.Abs(filepath.Join(meta.OutputDir, outputName))
 	if err != nil {
 		return err
 	}
@@ -247,18 +251,39 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 		if err != nil {
 			return err
 		}
+		ins.finishHook()
 		return nil
 	}
 
 	return nil
 }
 
-func (operat *operation) sendHook(stat *Stat) error {
+func (operat *operation) copyHooks() []Hook {
 	var tmpHooks []Hook
 	operat.down.mux.Lock()
 	tmpHooks = make([]Hook, len(operat.hooks))
 	copy(tmpHooks, operat.hooks)
 	operat.down.mux.Unlock()
+	return tmpHooks
+}
+
+func (operat *operation) finishHook() error {
+	tmpHooks := operat.copyHooks()
+
+	err := Hooks(tmpHooks).Finish(&Stat{
+		Meta:        operat.meta,
+		Down:        operat.down,
+		TotalLength: operat.size,
+	})
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "finish hook 失败: %v\n", err)
+	}
+	return nil
+}
+
+func (operat *operation) sendHook(stat *Stat) error {
+	tmpHooks := operat.copyHooks()
 
 	err := Hooks(tmpHooks).Send(stat)
 	if err != nil {

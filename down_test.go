@@ -13,9 +13,9 @@ import (
 
 func TestDown(t *testing.T) {
 	// 创建一个基本下载信息
-	meta := down.NewMeta("http://downloadtest.kdatacenter.com/100MB", "./", "")
+	meta := down.NewMeta("http://downloadtest.kdatacenter.com/100MB", "./tmp", "")
 	// 给下载器添加进度条打印的 Hook
-	down.Default.AddHook(&down.BarHook{})
+	down.Default.AddHook(down.DefaultBarHook)
 	// 执行下载
 	err := down.Default.Run(meta)
 	if err != nil {

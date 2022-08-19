@@ -2,6 +2,7 @@ package down
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"math/rand"
 	"os"
@@ -47,10 +48,6 @@ func filterFileNameFormWindows(name string) string {
 }
 
 func filterFileNameFormDarwin(name string) string {
-	// 过滤头部的 .
-	name = strings.TrimPrefix(name, regexGetOne(`^([\.]+)`, name))
-	// 过滤非法字符
-	name = strings.ReplaceAll(name, ":", "")
 	return name
 }
 
@@ -71,7 +68,7 @@ func regexGetOne(str, s string) string {
 
 // randomString 随机数
 func randomString(size int, kind int) string {
-	ikind, kinds, rsbytes := kind, [][]int{[]int{10, 48}, []int{26, 97}, []int{26, 65}}, make([]byte, size)
+	ikind, kinds, rsbytes := kind, [][]int{{10, 48}, {26, 97}, {26, 65}}, make([]byte, size)
 	isAll := kind > 2 || kind < 0
 	rand.Seed(time.Now().UnixNano())
 	for i := 0; i < size; i++ {
@@ -115,4 +112,21 @@ func (r *ioProxyReader) Close() (err error) {
 		return closer.Close()
 	}
 	return
+}
+
+// formatFileSize 字节的单位转换 保留两位小数
+func formatFileSize(fileSize int64) (size string) {
+	if fileSize < 1024 {
+		return fmt.Sprintf("%.2f B", float64(fileSize)/float64(1))
+	} else if fileSize < (1024 * 1024) {
+		return fmt.Sprintf("%.2f KB", float64(fileSize)/float64(1024))
+	} else if fileSize < (1024 * 1024 * 1024) {
+		return fmt.Sprintf("%.2f MB", float64(fileSize)/float64(1024*1024))
+	} else if fileSize < (1024 * 1024 * 1024 * 1024) {
+		return fmt.Sprintf("%.2f GB", float64(fileSize)/float64(1024*1024*1024))
+	} else if fileSize < (1024 * 1024 * 1024 * 1024 * 1024) {
+		return fmt.Sprintf("%.2f TB", float64(fileSize)/float64(1024*1024*1024*1024))
+	} else {
+		return fmt.Sprintf("%.2f EB", float64(fileSize)/float64(1024*1024*1024*1024*1024))
+	}
 }
