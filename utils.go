@@ -116,6 +116,9 @@ func (r *ioProxyReader) Close() (err error) {
 
 // formatFileSize 字节的单位转换 保留两位小数
 func formatFileSize(fileSize int64) (size string) {
+	if fileSize < 0 {
+		return "0.00 B"
+	}
 	if fileSize < 1024 {
 		return fmt.Sprintf("%.2f B", float64(fileSize)/float64(1))
 	} else if fileSize < (1024 * 1024) {
