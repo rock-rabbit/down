@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"mime"
 	"net/http"
 	"net/url"
@@ -389,7 +388,7 @@ func (operat *operation) baseInfo() error {
 	if err != nil {
 		return err
 	}
-	headinfo, _ := ioutil.ReadAll(res.Body)
+	headinfo, _ := io.ReadAll(res.Body)
 	res.Body.Close()
 
 	contentRange := res.Header.Get("content-range")
