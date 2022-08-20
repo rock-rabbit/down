@@ -1,8 +1,31 @@
 package down
 
 import (
+	"bytes"
+	"io"
 	"testing"
 )
+
+// TestIoProxyReader 测试代理 io
+func TestIoProxyReader(t *testing.T) {
+	testStr := "rockrabbit"
+	testReader := bytes.NewReader([]byte(testStr))
+	lenght := 0
+	ioproxy := &ioProxyReader{
+		reader: testReader,
+		send: func(n int) {
+			lenght += n
+		},
+	}
+	_, err := io.ReadAll(ioproxy)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if lenght != len(testStr) {
+		t.Errorf("代理IO失败, 获得 %d 字节, 应该获得 %d 字节", lenght, len(testStr))
+	}
+}
 
 // TestFormatFileSize 测试字节的单位转换
 func TestFormatFileSize(t *testing.T) {
