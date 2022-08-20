@@ -184,7 +184,7 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 	for idx, perhook := range ins.down.PerHooks {
 		ins.hooks[idx], err = perhook.Make(stat)
 		if err != nil {
-			return fmt.Errorf("down Hook: %s", err)
+			return fmt.Errorf("down error: Make Hook: %s", err)
 		}
 	}
 	// 初始化操作
@@ -201,34 +201,34 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 	}
 	outputPath, err = filepath.Abs(filepath.Join(meta.OutputDir, outputName))
 	if err != nil {
-		return err
+		return fmt.Errorf("down error: filepath.Abs: %s", err)
 	}
 	// 文件是否存在, 这里之后支持断点续传后需要改逻辑
 	if fileExist(outputPath) {
 		if !ins.down.Replace {
-			return fmt.Errorf("down: 已存在文件 %s，若要强制替换文件请将 down.Replace 设为 true", outputPath)
+			return fmt.Errorf("down error: 已存在文件 %s，若要强制替换文件请将 down.Replace 设为 true", outputPath)
 		}
 		// 需要强制覆盖, 删除掉原文件
 		err = os.Remove(outputPath)
 		if err != nil {
-			return err
+			return fmt.Errorf("down error: Remove file: %s", err)
 		}
 	}
 	// 单线程下载逻辑
 	if !ins.multithread || ins.down.ThreadCount <= 1 {
 		f, err := os.OpenFile(outputPath, os.O_CREATE|os.O_RDWR, ins.meta.Perm)
 		if err != nil {
-			return err
+			return fmt.Errorf("down error: Open file: %s", err)
 		}
 		defer f.Close()
 
 		req, err := ins.request(http.MethodGet, ins.meta.URI, nil)
 		if err != nil {
-			return err
+			return fmt.Errorf("down error: Request: %s", err)
 		}
 		res, err := ins.do(req)
 		if err != nil {
-			return err
+			return fmt.Errorf("down error: Request Do: %s", err)
 		}
 		defer res.Body.Close()
 
@@ -249,7 +249,7 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 			}
 		}})
 		if err != nil {
-			return err
+			return fmt.Errorf("down error: io.Copy: %s", err)
 		}
 		ins.finishHook()
 		return nil
@@ -277,7 +277,7 @@ func (operat *operation) finishHook() error {
 	})
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "finish hook 失败: %v\n", err)
+		fmt.Fprintf(os.Stderr, "down error: finish hook failure: %v\n", err)
 	}
 	return nil
 }
@@ -287,7 +287,7 @@ func (operat *operation) sendHook(stat *Stat) error {
 
 	err := Hooks(tmpHooks).Send(stat)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "send hook 失败: %v\n", err)
+		fmt.Fprintf(os.Stderr, "down error: send hook failure: %v\n", err)
 	}
 	return nil
 }
@@ -367,7 +367,7 @@ func (operat *operation) do(rsequest *http.Request) (*http.Response, error) {
 			if requestError != nil {
 				err = fmt.Errorf("down error: %v", requestError)
 			} else {
-				err = fmt.Errorf("%s down error: HTTP %d", operat.meta.URI, res.StatusCode)
+				err = fmt.Errorf("down error: %s HTTP %d", operat.meta.URI, res.StatusCode)
 			}
 			return nil, err
 		}
