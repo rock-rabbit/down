@@ -6,6 +6,25 @@ import (
 	"testing"
 )
 
+// TestFileExist 测试文件是否存在
+func TestFileExist(t *testing.T) {
+	testFile := []struct {
+		filepath string
+		exist    bool
+	}{
+		{"./utils.go", true},
+		{"./utils_nil_nil.go", false},
+	}
+
+	for _, v := range testFile {
+		tmp := fileExist(v.filepath)
+		if tmp != v.exist {
+			t.Errorf("测试文件是否存在失败, 获得 %v, 应该为 %v", tmp, v.exist)
+		}
+	}
+
+}
+
 // TestIoProxyReader 测试代理 io
 func TestIoProxyReader(t *testing.T) {
 	testStr := "rockrabbit"
