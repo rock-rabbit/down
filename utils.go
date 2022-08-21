@@ -18,8 +18,6 @@ func filterFileName(name string) string {
 	switch runtime.GOOS {
 	case "windows":
 		return filterFileNameFormWindows(name)
-	case "darwin":
-		return filterFileNameFormDarwin(name)
 	}
 	return name
 }
@@ -36,18 +34,14 @@ func filterFileNameFormWindows(name string) string {
 		c := bytes.NewBufferString("")
 		for _, v := range name {
 			c.WriteString(string(v))
+			i++
 			if i == 255 {
 				break
 			}
-			i++
 		}
 		name = c.String()
 	}
 
-	return name
-}
-
-func filterFileNameFormDarwin(name string) string {
 	return name
 }
 
@@ -67,7 +61,15 @@ func regexGetOne(str, s string) string {
 }
 
 // randomString 随机数
+// size 随机码的位数
+// kind 0=纯数字,1=小写字母,2=大写字母,3=数字、大小写字母
 func randomString(size int, kind int) string {
+	if size < 1 {
+		return ""
+	}
+	if kind < 0 {
+		kind = 0
+	}
 	ikind, kinds, rsbytes := kind, [][]int{{10, 48}, {26, 97}, {26, 65}}, make([]byte, size)
 	isAll := kind > 2 || kind < 0
 	rand.Seed(time.Now().UnixNano())

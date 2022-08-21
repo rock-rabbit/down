@@ -3,8 +3,94 @@ package down
 import (
 	"bytes"
 	"io"
+	"strings"
 	"testing"
 )
+
+// TestFilterFileNameWindows windows 规定过滤掉非法字符
+func TestFilterFileNameWindows(t *testing.T) {
+	names := [][2]string{
+		{"这在济南是合法的?", "这在济南是合法的"},
+		{"大明湖\\红叶谷\\千佛山，这些都很好玩", "大明湖红叶谷千佛山，这些都很好玩"},
+		{"最好玩的地方是融创乐园/融创乐园", "最好玩的地方是融创乐园融创乐园"},
+		{"哔哔***哔哔", "哔哔哔哔"},
+		{"宝贝\"我爱你\"", "宝贝我爱你"},
+		{"这里输入<文件名>", "这里输入文件名"},
+		{"济南:山东的省会", "济南山东的省会"},
+		{strings.Repeat("1", 256), strings.Repeat("1", 255)},
+	}
+
+	for _, v := range names {
+		tmp := filterFileNameFormWindows(v[0])
+		if tmp != v[1] {
+			t.Errorf("过滤掉非法字符失败, 输出 %s, 应输出 %s", tmp, v[1])
+		}
+	}
+}
+
+// TestGetStringLength 获取字符串的长度
+func TestGetStringLength(t *testing.T) {
+	testData := []struct {
+		content string
+		lenght  int
+	}{
+		{"", 0},
+		{"rockrabbit", 10},
+		{"我是一名网络民工", 8},
+	}
+	for _, v := range testData {
+		tmp := getStringLength(v.content)
+		if tmp != v.lenght {
+			t.Errorf("获取字符串的长度失败, 输出 %d, 应输出 %d", tmp, v.lenght)
+		}
+	}
+}
+
+// TestRegexGetOne 获取匹配到的单个字符串
+func TestRegexGetOne(t *testing.T) {
+	testData := []struct {
+		regex   string
+		content string
+		out     string
+	}{
+		{``, "", ""},
+		{`数量：(\d+)`, "---数量：827", "827"},
+		{`数量：\d+`, "---数量：827", ""},
+		{`数量：\d+---(\d+)`, "---数量：827---928---", "928"},
+	}
+	for _, v := range testData {
+		tmp := regexGetOne(v.regex, v.content)
+		if tmp != v.out {
+			t.Errorf("匹配单个字符串失败, 输出 %s, 应输出 %s", tmp, v.out)
+		}
+	}
+}
+
+// TestRandomString 测试随机数生成
+func TestRandomString(t *testing.T) {
+	testData := []struct {
+		size       int
+		kind       int
+		correctLen int
+	}{
+		{-1, 0, 0},
+		{1, -1, 1},
+		{1, 3, 1},
+		{0, 0, 0},
+		{1, 0, 1},
+		{5, 0, 5},
+		{10, 0, 10},
+		{107, 0, 107},
+		{1000, 0, 1000},
+		{10000, 0, 10000},
+	}
+	for _, v := range testData {
+		tmp := randomString(v.size, v.kind)
+		if len(tmp) != v.correctLen {
+			t.Errorf("随机数生成失败, 获得 %d 个字符, 应该获得 %d 个字符", len(tmp), v.correctLen)
+		}
+	}
+}
 
 // TestFileExist 测试文件是否存在
 func TestFileExist(t *testing.T) {
@@ -22,28 +108,50 @@ func TestFileExist(t *testing.T) {
 			t.Errorf("测试文件是否存在失败, 获得 %v, 应该为 %v", tmp, v.exist)
 		}
 	}
-
 }
 
 // TestIoProxyReader 测试代理 io
 func TestIoProxyReader(t *testing.T) {
-	testStr := "rockrabbit"
-	testReader := bytes.NewReader([]byte(testStr))
-	lenght := 0
-	ioproxy := &ioProxyReader{
-		reader: testReader,
-		send: func(n int) {
+	t.Run("closer", func(t *testing.T) {
+		testStr := "rockrabbit"
+
+		testReader := io.NopCloser(bytes.NewBuffer([]byte(testStr)))
+		lenght := 0
+		ioproxy := &ioProxyReader{reader: testReader}
+		ioproxy.send = func(n int) {
 			lenght += n
-		},
-	}
-	_, err := io.ReadAll(ioproxy)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	if lenght != len(testStr) {
-		t.Errorf("代理IO失败, 获得 %d 字节, 应该获得 %d 字节", lenght, len(testStr))
-	}
+		}
+		ioproxy.Close()
+		_, err := io.ReadAll(ioproxy)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if lenght != 10 {
+			t.Errorf("代理IO失败, 获得 %d 字节, 应该获得 %d 字节", lenght, 10)
+		}
+	})
+
+	t.Run("reader", func(t *testing.T) {
+		testStr := "rockrabbit"
+
+		testReader := bytes.NewBuffer([]byte(testStr))
+		lenght := 0
+		ioproxy := &ioProxyReader{reader: testReader}
+		ioproxy.send = func(n int) {
+			lenght += n
+		}
+		ioproxy.Close()
+		_, err := io.ReadAll(ioproxy)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if lenght != 10 {
+			t.Errorf("代理IO失败, 获得 %d 字节, 应该获得 %d 字节", lenght, 10)
+		}
+	})
+
 }
 
 // TestFormatFileSize 测试字节的单位转换
