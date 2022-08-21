@@ -1,4 +1,4 @@
-**🥳 当前项目处于<font face="宋体" color=red>开发阶段</font>, 请勿使用**
+**🥳 当前项目处于<font color=red>开发阶段</font>, 请勿使用**
 
 ## 🎤 简介
 零依赖，高性能，可扩展，结构清晰的 HTTP 文件下载器 Golang 包
