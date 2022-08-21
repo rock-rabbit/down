@@ -424,7 +424,7 @@ func getFileName(uri, contentDisposition, contentType string, headinfo []byte) s
 	u, _ := url.Parse(uri)
 	if u != nil {
 		us := strings.Split(u.Path, "/")
-		if len(us) > 0 {
+		if len(us) > 1 {
 			name = us[len(us)-1]
 		}
 	}
@@ -432,6 +432,13 @@ func getFileName(uri, contentDisposition, contentType string, headinfo []byte) s
 	fileType := getFileType(headinfo)
 	if fileType != "" {
 		ext = fmt.Sprintf(".%s", fileType)
+	}
+	if ext == "" {
+		// 尝试从 content-type 中获取文件后缀
+		extlist, _ := mime.ExtensionsByType(contentType)
+		if len(extlist) != 0 {
+			ext = extlist[0]
+		}
 	}
 	if fname := filterFileName(name); name != "" && fname != "" {
 		if strings.HasSuffix(fname, ext) {

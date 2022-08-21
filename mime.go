@@ -39,6 +39,7 @@ var mimeType = [][2]string{
 	{"52494646d07d60074156", "avi"},
 	{"4d546864000000060001", "mid"}, //MIDI (mid)
 	{"504b0304140000000800", "zip"},
+	{"504b0304140008000800", "zip"},
 	{"526172211a0700cf9073", "rar"},
 	{"235468697320636f6e66", "ini"},
 	{"504b03040a0000000000", "jar"},
@@ -67,6 +68,9 @@ var mimeType = [][2]string{
 }
 
 func getFileType(src []byte) string {
+	if len(src) == 0 {
+		return ""
+	}
 	var fileType string
 	s := bytesToHexString(src)
 	for _, v := range mimeType {

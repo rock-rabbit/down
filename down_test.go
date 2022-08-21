@@ -1,4 +1,9 @@
-package down_test
+package down
+
+import (
+	"strings"
+	"testing"
+)
 
 // func TestDown(t *testing.T) {
 // 	// 创建一个基本下载信息
@@ -16,26 +21,25 @@ package down_test
 // 	}
 // }
 
-// func TestGetFileName(t *testing.T) {
-// 	u, _ := url.Parse("https://bizsec-auth.alicdn.com/a9b5b21ee64d2b47/Qe9k4XSEr4zqvIg7131/dKAC7hFeQdQ2AWPz7hW_223897437873___hd.mp4?auth_key=1660701664-0-0-3baf9eb4e584ff678d5601649e523975&t=212cbb6e16606989647024260edc28&b=video&p=cloudvideo_http_800000012_2")
-// 	if u != nil {
-// 		us := strings.Split(u.Path, "/")
-// 		if len(us) > 0 {
-// 			name := us[len(us)-1]
-// 			fmt.Println(name)
-// 		}
-
-// 	}
-// }
-
-// // EnableTestServer 启动测试服务
-// func EnableTestServer(t *testing.T) {
-// 	http.HandleFunc("/test.file", func(w http.ResponseWriter, r *http.Request) {
-// 		fmt.Println(r.Method)
-// 		// w.Header().Add("")
-// 	})
-// 	err := http.ListenAndServe(":28372", nil)
-// 	if err != nil {
-// 		t.Error(err)
-// 	}
-// }
+func TestGetFileName(t *testing.T) {
+	testData := []struct {
+		uri                string
+		contentDisposition string
+		contentType        string
+		headinfo           []byte
+		out                string
+	}{
+		{"", "", "", []byte{}, "file"},
+		{"test.com", "", "", []byte{}, "file"},
+		{"test.com", "attachment;filename=2022-12.xlsx", "", []byte{}, "2022-12.xlsx"},
+		{"test.com/file", "", "application/postscript", []byte{}, "file.ai"},
+		{"test.com/file", "", "", []byte{80, 75, 3, 4, 20, 0, 0, 0, 8, 0}, "file.zip"},
+		{"test.com/2022-12.xlsx?s=521", "", "", []byte{}, "2022-12.xlsx"},
+	}
+	for _, v := range testData {
+		tmp := getFileName(v.uri, v.contentDisposition, v.contentType, v.headinfo)
+		if tmp != v.out && !strings.HasPrefix(tmp, v.out) {
+			t.Errorf("过滤掉非法字符失败, 输出 %s, 应输出 %s", tmp, v.out)
+		}
+	}
+}
