@@ -1,19 +1,26 @@
-## down
-你可以很方便的使用 down 下载 HTTP 协议的文件, 它的优点: 无外部依赖, 灵活的 HOOK, 清晰的结构
+**🥳 当前项目处于<font face="宋体" color=red>开发阶段</font>, 请勿使用**
 
-当前项目处于开发阶段, 请勿使用
+## 🎤 简介
+零依赖，高性能，可扩展，结构清晰的 HTTP 文件下载器 Golang 包
 
 ## 🎊 安装
-```
+``` bash
+# github 安装
 go get github.com/rock-rabbit/down
+# gitee 安装
+go get gitee.com/rock_rabbit/down
+# 下载到本地使用，零依赖让这种方式变得极为方便
+# ...
 ```
+
 ## 🎉 功能
 - 命令行进度条
-- 文件名自动识别, 识别不到时会自动生成, 优先会使用 meta.OutputName 中的名称
-- Hook, down 会将下载进度发送给已经注册的 Hook
+- 单线程下载
+- 覆盖下载
+- HOOK
 
 ## 🏍️ 计划
-- 多线程下载, 服务端不支持多线程下载时使用单线程
+- 多线程下载
 - 限速下载
 - 断点下载
 
@@ -33,7 +40,7 @@ go get github.com/rock-rabbit/down
 		log.Panic(err)
 	}
 ```
-Down 和 Meta 结构体, 两个主要的结构体
+介绍两个主要的结构体 Down 和 Meta
 ``` golang
 
 type Meta struct {
@@ -76,7 +83,7 @@ type Down struct {
 }
 ```
 
-Hook 接口, 具体 Hook 的实现请查看 bar_hook.go 文件实现的进度条 hook
+Hook, 具体 Hook 的实现请查看 bar_hook.go 文件实现的进度条 hook
 ``` golang
 // PerHook 是用来创建 Hook 的接口
 // down 会在下载之前执行 Make 获得 Hook
