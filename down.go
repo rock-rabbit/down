@@ -18,13 +18,18 @@ import (
 	"time"
 )
 
+// Stat 下载中发送给 Hook 的数据
 type Stat struct {
-	Meta            *Meta
-	Down            *Down
-	TotalLength     int64
+	Meta *Meta
+	Down *Down
+	// TotalLength 文件大小
+	TotalLength int64
+	// CompletedLength 已下载的文件大小
 	CompletedLength int64
-	DownloadSpeed   int64
-	Connections     int
+	// DownloadSpeed 每秒下载字节数
+	DownloadSpeed int64
+	// Connections 与资源服务器的连接数
+	Connections int
 }
 
 // stating 下载进行时的数据
@@ -32,15 +37,29 @@ type stating struct {
 	CompletedLength *int64
 }
 
+// Meta 下载信息，请求信息和存储信息
 type Meta struct {
-	URI        string
+	// URI 下载资源的地址
+	URI string
+	// OutputName 输出文件名，为空则通过 getFileName 自动获取
 	OutputName string
-	OutputDir  string
-	Header     http.Header
+	// OutputDir 输出目录，默认为 ./
+	OutputDir string
+
+	// Method 默认为 GET
+	Method string
+
+	// Body 请求时的 Body，默认为 nil
+	Body io.Reader
+
+	// Header 请求头，默认拷贝 defaultHeader
+	Header http.Header
+
 	// Perm 新建文件的权限, 默认为 0600
 	Perm fs.FileMode
 }
 
+// Down 下载器，请求配置和 Hook 信息
 type Down struct {
 	// PerHooks 是返回下载进度的钩子
 	PerHooks []PerHook
@@ -70,9 +89,11 @@ type Down struct {
 
 // operation 下载前的配置拷贝结构, 防止多线程使用时的配置变化
 type operation struct {
-	down   *Down
-	meta   *Meta
-	hooks  []Hook
+	down *Down
+	meta *Meta
+	// hooks 通过 Down 的 PerHook 生成的 Hook
+	hooks []Hook
+	// client 通过 Down 配置生成 *http.Client
 	client *http.Client
 	// size 文件大小
 	size int64
@@ -80,12 +101,18 @@ type operation struct {
 	multithread bool
 	// filename 从 URI 和 头信息 中获得的文件名称, 未指定名称时使用
 	filename string
+	// ctx 上下文
+	ctx context.Context
 
+	// stat 下载进行时的进度记录
 	stat *stating
 }
 
 var (
-	Default       = New()
+	// Default 默认下载器
+	Default = New()
+
+	// defaultHeader 默认请求头
 	defaultHeader = http.Header{
 		"accept":          []string{"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"},
 		"accept-encoding": []string{"gzip, deflate, br"},
@@ -94,6 +121,7 @@ var (
 	}
 )
 
+// New 创建一个默认的下载器
 func New() *Down {
 	return &Down{
 		PerHooks:       make([]PerHook, 0),
@@ -111,6 +139,7 @@ func New() *Down {
 	}
 }
 
+// NewMeta 创建一个新的 Meta
 func NewMeta(uri, outputDir, outputName string) *Meta {
 	header := make(http.Header, len(defaultHeader))
 
@@ -124,11 +153,14 @@ func NewMeta(uri, outputDir, outputName string) *Meta {
 		URI:        uri,
 		OutputName: outputName,
 		OutputDir:  outputDir,
+		Method:     http.MethodGet,
+		Body:       nil,
 		Header:     header,
 		Perm:       0600,
 	}
 }
 
+// copy 在执行下载前，会拷贝 Meta
 func (meta *Meta) copy() *Meta {
 	tmpMeta := *meta
 
@@ -145,12 +177,14 @@ func (meta *Meta) copy() *Meta {
 	return &tmpMeta
 }
 
+// AddHook 添加 Hook 的创建接口
 func (down *Down) AddHook(perhook PerHook) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
 	down.PerHooks = append(down.PerHooks, perhook)
 }
 
+// copy 在执行下载前，会拷贝 Down
 func (down *Down) copy() *Down {
 	tmpDown := *down
 	tmpDown.PerHooks = make([]PerHook, len(down.PerHooks))
@@ -160,10 +194,12 @@ func (down *Down) copy() *Down {
 	return &tmpDown
 }
 
+// Run 执行下载
 func (down *Down) Run(meta *Meta) error {
 	return down.RunContext(context.Background(), meta)
 }
 
+// RunContext 基于 context 执行下载
 func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 	var ins *operation
 	// 组合操作结构,将配置拷贝一份
@@ -174,6 +210,7 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 		stat: &stating{
 			CompletedLength: new(int64),
 		},
+		ctx: ctx,
 	}
 	down.mux.Unlock()
 	// 生成 Hook
@@ -257,6 +294,7 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 	return nil
 }
 
+// copyHooks 拷贝 Hook ，防止使用 Hook 中途发生变化
 func (operat *operation) copyHooks() []Hook {
 	var tmpHooks []Hook
 	operat.down.mux.Lock()
@@ -266,6 +304,7 @@ func (operat *operation) copyHooks() []Hook {
 	return tmpHooks
 }
 
+// finishHook 下载完成时通知 Hook
 func (operat *operation) finishHook() error {
 	tmpHooks := operat.copyHooks()
 
@@ -281,6 +320,7 @@ func (operat *operation) finishHook() error {
 	return nil
 }
 
+// sendHook 下载途中给 Hook 发送下载信息如 下载速度、已下载大小、下载连接数等...
 func (operat *operation) sendHook(stat *Stat) error {
 	tmpHooks := operat.copyHooks()
 
@@ -291,6 +331,7 @@ func (operat *operation) sendHook(stat *Stat) error {
 	return nil
 }
 
+// sendStat 下载资源途中对数据的处理和发送 Hook
 func (operat *operation) sendStat(ctx context.Context, connections int) {
 	oldCompletedLength := atomic.LoadInt64(operat.stat.CompletedLength)
 Loop:
@@ -316,6 +357,7 @@ Loop:
 	}
 }
 
+// init 初始化，down 配置的应用
 func (operat *operation) init() {
 	operat.client = &http.Client{
 		Transport: &http.Transport{
@@ -331,8 +373,9 @@ func (operat *operation) init() {
 
 }
 
+// request 对于 http.NewRequestWithContext 的包装
 func (operat *operation) request(method string, url string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequest(method, url, body)
+	req, err := http.NewRequestWithContext(operat.ctx, method, url, body)
 	if err != nil {
 		return nil, err
 	}
@@ -350,6 +393,7 @@ func (operat *operation) request(method string, url string, body io.Reader) (*ht
 	return req, nil
 }
 
+// do 对于 client.Do 的包装，主要实现重试机制
 func (operat *operation) do(rsequest *http.Request) (*http.Response, error) {
 	// 请求失败时，重试机制
 	var (
@@ -376,8 +420,9 @@ func (operat *operation) do(rsequest *http.Request) (*http.Response, error) {
 
 }
 
+// baseInfo 获取资源基础信息，多线程支持的判断
 func (operat *operation) baseInfo() error {
-	req, err := operat.request(http.MethodGet, operat.meta.URI, nil)
+	req, err := operat.request(operat.meta.Method, operat.meta.URI, operat.meta.Body)
 	if err != nil {
 		return err
 	}
@@ -411,6 +456,9 @@ func (operat *operation) baseInfo() error {
 	return nil
 }
 
+// getFileName 自动获取资源文件名称
+// 名称获取的顺序：响应头 content-disposition 的 filename 字段、uri.Path 中的 \ 最后的字符、随机生成
+// 文件后缀的获取顺序：文件魔数、响应头 content-type 匹配系统中的库
 func getFileName(uri, contentDisposition, contentType string, headinfo []byte) string {
 	// 尝试在响应中获取文件名称
 	_, params, _ := mime.ParseMediaType(contentDisposition)
