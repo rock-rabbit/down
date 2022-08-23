@@ -87,10 +87,7 @@ func (down *Down) Run(meta *Meta) error {
 
 // RunContext 基于 context 执行下载
 func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
-	ins, err := down.operation(ctx, meta)
-	if err != nil {
-		return fmt.Errorf("down error: %s", err)
-	}
+	ins := down.operation(ctx, meta)
 	// 运行 operation
 	if err := ins.start(); err != nil {
 		return fmt.Errorf("down error: %s", err)
@@ -99,7 +96,7 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 }
 
 // operation 创建 operation
-func (down *Down) operation(ctx context.Context, meta *Meta) (*operation, error) {
+func (down *Down) operation(ctx context.Context, meta *Meta) *operation {
 	var ins *operation
 	// 组合操作结构,将配置拷贝一份
 	down.mux.Lock()
@@ -112,5 +109,5 @@ func (down *Down) operation(ctx context.Context, meta *Meta) (*operation, error)
 		ctx: ctx,
 	}
 	down.mux.Unlock()
-	return ins, nil
+	return ins
 }

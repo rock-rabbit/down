@@ -23,6 +23,7 @@ go get gitee.com/rock_rabbit/down
 ## 🏍️ 计划
 - 限速下载
 - 断点下载
+- 多文件同时下载
 
 ## 使用方式
 ``` golang
