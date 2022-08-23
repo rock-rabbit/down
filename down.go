@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -63,27 +64,27 @@ type Meta struct {
 
 // Down 下载器，请求配置和 Hook 信息
 type Down struct {
-	// PerHooks 是返回下载进度的钩子
+	// PerHooks 是返回下载进度的钩子，默认为空
 	PerHooks []PerHook
-	// ThreadCount 多线程下载时最多同时下载一个文件的线程
+	// ThreadCount 多线程下载时最多同时下载一个文件的线程，默认为 1
 	ThreadCount int
-	// ThreadSize 多线程下载时每个线程下载的字节数
+	// ThreadSize 多线程下载时每个线程下载的字节数，默认为 1048576
 	ThreadSize int64
 	// CreateDir 当需要创建目录时，是否创建目录，默认为 true
 	CreateDir bool
-	// Replace 遇到相同文件时是否要强制替换
+	// Replace 遇到相同文件时是否要强制替换，默认为 true
 	Replace bool
-	// Resume 是否每次都重新下载,不尝试断点续传
+	// Resume 是否每次都重新下载,不尝试断点续传，默认为 true
 	Resume bool
-	// ConnectTimeout HTTP 连接请求的超时时间
+	// ConnectTimeout HTTP 连接请求的超时时间，默认为 5 秒
 	ConnectTimeout time.Duration
-	// Timeout 超时时间
+	// Timeout 下载总超时时间，默认为 10 分钟
 	Timeout time.Duration
-	// RetryNumber 最多重试次数
+	// RetryNumber 最多重试次数，默认为 5
 	RetryNumber int
-	// RetryTime 重试时的间隔时间
+	// RetryTime 重试时的间隔时间，默认为 0
 	RetryTime time.Duration
-	// Proxy Http 代理设置
+	// Proxy Http 代理设置，默认为 http.ProxyFromEnvironment
 	Proxy func(*http.Request) (*url.URL, error)
 	// TempFileExt 临时文件后缀, 默认为 down
 	TempFileExt string
@@ -119,7 +120,6 @@ var (
 	// defaultHeader 默认请求头
 	defaultHeader = http.Header{
 		"accept":          []string{"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"},
-		"accept-encoding": []string{"gzip, deflate, br"},
 		"accept-language": []string{"zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6"},
 		"user-agent":      []string{"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.81 Safari/537.36 Edg/104.0.1293.54"},
 	}
@@ -134,8 +134,8 @@ func New() *Down {
 		CreateDir:      true,
 		Replace:        true,
 		Resume:         true,
-		ConnectTimeout: time.Second * 60,
-		Timeout:        time.Second * 60,
+		ConnectTimeout: time.Second * 5,
+		Timeout:        time.Minute * 10,
 		RetryNumber:    5,
 		RetryTime:      0,
 		Proxy:          http.ProxyFromEnvironment,
@@ -285,22 +285,28 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 		if ins.size == 0 {
 			ins.size, _ = strconv.ParseInt(res.Header.Get("content-length"), 10, 64)
 		}
-
+		timeoutCtx, timeoutCancel := context.WithTimeout(ins.ctx, ins.down.Timeout)
+		defer timeoutCancel()
 		// 每秒给 Hook 发送信息
-		go ins.sendStat(ctx, 1)
+		go ins.sendStat(timeoutCtx, nil)
 		// 使用代理 io 写入文件
 		_, err = io.Copy(f, &ioProxyReader{reader: res.Body, send: func(n int) {
 			select {
-			case <-ctx.Done():
+			case <-timeoutCtx.Done():
 				res.Body.Close()
 			default:
 				atomic.AddInt64(ins.stat.CompletedLength, int64(n))
 			}
 		}})
-		if err != nil {
-			return fmt.Errorf("down error: io.Copy: %s", err)
+		select {
+		case <-timeoutCtx.Done():
+			return fmt.Errorf("down error: 超时")
+		default:
+			if err != nil {
+				return fmt.Errorf("down error: io.Copy: %s", err)
+			}
+			ins.finishHook()
 		}
-		ins.finishHook()
 		return nil
 	}
 	// 多线程下载逻辑
@@ -319,12 +325,14 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 	groupPool := NewWaitGroupPool(ins.down.ThreadCount)
 	done := make(chan int)
 	cherr := make(chan error)
+	timeoutCtx, timeoutCancel := context.WithTimeout(ins.ctx, ins.down.Timeout)
+	defer timeoutCancel()
 	// 每秒给 Hook 发送信息
-	go ins.sendStat(ctx, 1)
+	go ins.sendStat(timeoutCtx, groupPool)
 	go func() {
 		for _, fileRange := range task {
 			groupPool.Add()
-			go ins.threadTask(groupPool, cherr, f, fileRange[0], fileRange[1])
+			go ins.threadTask(timeoutCtx, groupPool, cherr, f, fileRange[0], fileRange[1])
 		}
 		groupPool.Wait()
 		done <- 1
@@ -332,8 +340,10 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 
 Loop:
 	select {
+	case <-timeoutCtx.Done():
+		return errors.New("down error: 超时")
 	case err = <-cherr:
-		return err
+		return fmt.Errorf("down error: %s", err)
 	case <-done:
 		break Loop
 	}
@@ -342,7 +352,7 @@ Loop:
 }
 
 // threadTask 单个线程的下载逻辑
-func (operat *operation) threadTask(groupPool *WaitGroupPool, cherr chan error, f *os.File, rangeStart, rangeEnd int64) {
+func (operat *operation) threadTask(ctx context.Context, groupPool *WaitGroupPool, cherr chan error, f *os.File, rangeStart, rangeEnd int64) {
 	defer groupPool.Done()
 	req, err := operat.request(http.MethodGet, operat.meta.URI, operat.meta.Body)
 	if err != nil {
@@ -362,7 +372,7 @@ func (operat *operation) threadTask(groupPool *WaitGroupPool, cherr chan error, 
 	// 使用代理 io 写入文件
 	_, err = io.Copy(buf, &ioProxyReader{reader: res.Body, send: func(n int) {
 		select {
-		case <-operat.ctx.Done():
+		case <-ctx.Done():
 			res.Body.Close()
 		default:
 			atomic.AddInt64(operat.stat.CompletedLength, int64(n))
@@ -422,7 +432,7 @@ func (operat *operation) sendHook(stat *Stat) error {
 }
 
 // sendStat 下载资源途中对数据的处理和发送 Hook
-func (operat *operation) sendStat(ctx context.Context, connections int) {
+func (operat *operation) sendStat(ctx context.Context, groupPool *WaitGroupPool) {
 	oldCompletedLength := atomic.LoadInt64(operat.stat.CompletedLength)
 Loop:
 	for {
@@ -430,6 +440,10 @@ Loop:
 		case <-ctx.Done():
 			break Loop
 		default:
+			connections := 1
+			if groupPool != nil {
+				connections = groupPool.Count()
+			}
 			completedLength := atomic.LoadInt64(operat.stat.CompletedLength)
 			downloadSpeed := completedLength - oldCompletedLength
 			oldCompletedLength = completedLength
@@ -452,13 +466,18 @@ func (operat *operation) init() {
 	operat.client = &http.Client{
 		Transport: &http.Transport{
 			// 应用来自环境变量的代理
-			Proxy:              operat.down.Proxy,
+			Proxy: operat.down.Proxy,
+			// 要求服务器返回非压缩的内容，前提是没有发送 accept-encoding 来接管 transport 的自动处理
 			DisableCompression: true,
+			// 等待响应头的超时时间
+			ResponseHeaderTimeout: operat.down.ConnectTimeout,
 			// TLS 握手超时时间
 			TLSHandshakeTimeout: 10 * time.Second,
-			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+			// 接受服务器提供的任何证书
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
-		Timeout: 15 * time.Minute,
+		// 超时时间
+		Timeout: 0,
 	}
 
 }

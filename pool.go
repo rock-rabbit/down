@@ -22,6 +22,11 @@ func NewWaitGroupPool(size int) *WaitGroupPool {
 	}
 }
 
+// Count 未完成线程的个数
+func (p *WaitGroupPool) Count() int {
+	return len(p.pool)
+}
+
 // Add 添加一个 sync.WaitGroup 线程
 func (p *WaitGroupPool) Add() {
 	p.pool <- struct{}{}

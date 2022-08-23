@@ -4,6 +4,7 @@ import (
 	"log"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDown(t *testing.T) {
@@ -19,6 +20,7 @@ func TestDown(t *testing.T) {
 	// 给下载器添加进度条打印的 Hook
 	Default.AddHook(DefaultBarHook)
 	Default.ThreadCount = 5
+	Default.Timeout = time.Second * 5
 	// 执行下载, 你也可以使用 RunContext 传递一个 Context
 	err := Default.Run(meta)
 	if err != nil {
