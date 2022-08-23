@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
+	"mime"
+	"net/url"
 	"os"
 	"regexp"
 	"runtime"
@@ -128,4 +131,71 @@ func formatFileSize(fileSize int64) (size string) {
 	} else {
 		return fmt.Sprintf("%.2f EB", float64(fileSize)/float64(1024*1024*1024*1024*1024))
 	}
+}
+
+// threadTask 多线程任务分割
+func threadTaskSplit(size, threadSize int64) [][2]int64 {
+	// size - 1 是因为范围是从 0 开始，需要提前减去
+	size = size - 1
+
+	taskCountFloat64 := float64(size) / float64(threadSize)
+	if math.Trunc(taskCountFloat64) != taskCountFloat64 {
+		taskCountFloat64++
+	}
+	taskCount := int(taskCountFloat64)
+	task := make([][2]int64, int(taskCount))
+	for i := 0; i < taskCount; i++ {
+		if i == 0 {
+			task[i][0] = int64(i) * threadSize
+		} else {
+			task[i][0] = int64(i)*threadSize + 1
+		}
+		task[i][1] = (int64(i) + 1) * threadSize
+		if task[i][1] > size {
+			task[i][1] = size
+		}
+	}
+	return task
+}
+
+// getFileName 自动获取资源文件名称
+// 名称获取的顺序：响应头 content-disposition 的 filename 字段、uri.Path 中的 \ 最后的字符、随机生成
+// 文件后缀的获取顺序：文件魔数、响应头 content-type 匹配系统中的库
+func getFileName(uri, contentDisposition, contentType string, headinfo []byte) string {
+	// 尝试在响应中获取文件名称
+	_, params, _ := mime.ParseMediaType(contentDisposition)
+	if name, ok := params["filename"]; ok && name != "" {
+		return name
+	}
+	// 尝试从 uri 中获取名称
+	var (
+		name, ext string
+	)
+	u, _ := url.Parse(uri)
+	if u != nil {
+		us := strings.Split(u.Path, "/")
+		if len(us) > 1 {
+			name = us[len(us)-1]
+		}
+	}
+	// 尝试在文件魔数获取文件后缀
+	fileType := getFileType(headinfo)
+	if fileType != "" {
+		ext = fmt.Sprintf(".%s", fileType)
+	}
+	if ext == "" {
+		// 尝试从 content-type 中获取文件后缀
+		extlist, _ := mime.ExtensionsByType(contentType)
+		if len(extlist) != 0 {
+			ext = extlist[0]
+		}
+	}
+	if fname := filterFileName(name); name != "" && fname != "" {
+		if strings.HasSuffix(fname, ext) {
+			return fname
+		}
+		return fmt.Sprintf("%s%s", fname, ext)
+	}
+	// 名称获取失败时随机生成名称
+	return fmt.Sprintf("file_%s%d%s", randomString(5, 1), time.Now().UnixNano(), ext)
 }
