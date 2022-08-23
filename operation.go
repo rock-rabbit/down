@@ -39,6 +39,22 @@ type operation struct {
 	stat *stating
 }
 
+// Stat 下载中发送给 Hook 的数据
+type Stat struct {
+	Meta *Meta
+	Down *Down
+	// TotalLength 文件大小
+	TotalLength int64
+	// CompletedLength 已下载的文件大小
+	CompletedLength int64
+	// DownloadSpeed 每秒下载字节数
+	DownloadSpeed int64
+	// OutputPath 最终文件的位置
+	OutputPath string
+	// Connections 与资源服务器的连接数
+	Connections int
+}
+
 // stating 下载进行时的数据
 type stating struct {
 	CompletedLength *int64
@@ -58,6 +74,15 @@ func (operat *operation) start() error {
 	operat.outputPath, err = filepath.Abs(filepath.Join(operat.meta.OutputDir, outputName))
 	if err != nil {
 		return fmt.Errorf("filepath.Abs: %s", err)
+	}
+	// 生成 Hook
+	operat.hooks = make([]Hook, len(operat.down.PerHooks))
+	stat := &Stat{Down: operat.down, Meta: operat.meta, TotalLength: operat.size, OutputPath: operat.outputPath}
+	for idx, perhook := range operat.down.PerHooks {
+		operat.hooks[idx], err = perhook.Make(stat)
+		if err != nil {
+			return fmt.Errorf("Make Hook: %s", err)
+		}
 	}
 	// 文件是否存在, 这里之后支持断点续传后需要改逻辑
 	if fileExist(operat.outputPath) {
@@ -117,7 +142,7 @@ func (operat *operation) multithreading() error {
 		groupPool.Wait()
 		done <- 1
 	}()
-
+	// 等待下载完成或失败
 	select {
 	case <-timeoutCtx.Done():
 		return errors.New("超时")
@@ -195,10 +220,6 @@ func (operat *operation) singleThread() error {
 	}
 	defer res.Body.Close()
 
-	// 当基础信息阶段没有获取到文件大小, 从这里再读取一遍
-	if operat.size == 0 {
-		operat.size, _ = strconv.ParseInt(res.Header.Get("content-length"), 10, 64)
-	}
 	timeoutCtx, timeoutCancel := context.WithTimeout(operat.ctx, operat.down.Timeout)
 	defer timeoutCancel()
 	// 每秒给 Hook 发送信息
@@ -284,6 +305,7 @@ Loop:
 				CompletedLength: completedLength,
 				DownloadSpeed:   downloadSpeed,
 				Connections:     connections,
+				OutputPath:      operat.outputPath,
 			}
 			operat.sendHook(stat)
 		}
@@ -372,8 +394,7 @@ func (operat *operation) baseInfo() error {
 	if err != nil {
 		return err
 	}
-	headinfo, _ := io.ReadAll(res.Body)
-	res.Body.Close()
+	defer res.Body.Close()
 
 	contentRange := res.Header.Get("content-range")
 
@@ -385,11 +406,18 @@ func (operat *operation) baseInfo() error {
 	// 文件名称
 	contentDisposition := res.Header.Get("content-disposition")
 	contentType := res.Header.Get("content-type")
-	operat.filename = getFileName(operat.meta.URI, contentDisposition, contentType, headinfo)
 
 	// 是否可以使用多线程
 	if res.Header.Get("accept-ranges") != "" || strings.Contains(contentRange, "bytes") || res.Header.Get("content-length") == "10" {
+		headinfo, _ := io.ReadAll(res.Body)
+		operat.filename = getFileName(operat.meta.URI, contentDisposition, contentType, headinfo)
 		operat.multithread = true
+	} else {
+		// 没有获取到 size ，大概率是因为不支持范围获取数据
+		if operat.size == 0 {
+			operat.size, _ = strconv.ParseInt(res.Header.Get("content-length"), 10, 64)
+		}
+		operat.filename = getFileName(operat.meta.URI, contentDisposition, contentType, []byte{})
 	}
 
 	return nil

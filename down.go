@@ -9,20 +9,6 @@ import (
 	"time"
 )
 
-// Stat 下载中发送给 Hook 的数据
-type Stat struct {
-	Meta *Meta
-	Down *Down
-	// TotalLength 文件大小
-	TotalLength int64
-	// CompletedLength 已下载的文件大小
-	CompletedLength int64
-	// DownloadSpeed 每秒下载字节数
-	DownloadSpeed int64
-	// Connections 与资源服务器的连接数
-	Connections int
-}
-
 // Down 下载器，请求配置和 Hook 信息
 type Down struct {
 	// PerHooks 是返回下载进度的钩子，默认为空
@@ -126,15 +112,5 @@ func (down *Down) operation(ctx context.Context, meta *Meta) (*operation, error)
 		ctx: ctx,
 	}
 	down.mux.Unlock()
-	// 生成 Hook
-	ins.hooks = make([]Hook, len(ins.down.PerHooks))
-	stat := &Stat{Down: ins.down, Meta: ins.meta}
-	var err error
-	for idx, perhook := range ins.down.PerHooks {
-		ins.hooks[idx], err = perhook.Make(stat)
-		if err != nil {
-			return nil, fmt.Errorf("Make Hook: %s", err)
-		}
-	}
 	return ins, nil
 }

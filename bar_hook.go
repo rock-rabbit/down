@@ -15,6 +15,9 @@ type BarTemplate struct {
 	// Template 模版
 	Template string
 
+	// NoSizeTemplate 获取不到文件大小时的模板
+	NoSizeTemplate string
+
 	// template 模版
 	template *template.Template
 
@@ -115,13 +118,14 @@ type BarHook struct {
 
 var DefaultBarHook = &BarHook{
 	Template: &BarTemplate{
-		Template:      `{{.CompletedLength}} / {{.TotalLength}} {{.Saucer}} {{.Progress}}% {{.DownloadSpeed}}/s {{.EstimatedTime}} conn:{{.Connections}}`,
-		Saucer:        "=",
-		SaucerHead:    ">",
-		SaucerPadding: "-",
-		BarStart:      "[",
-		BarEnd:        "]",
-		BarWidth:      80,
+		Template:       `{{.CompletedLength}} / {{.TotalLength}} {{.Saucer}} {{.Progress}}% {{.DownloadSpeed}}/s {{.EstimatedTime}} conn:{{.Connections}}`,
+		NoSizeTemplate: `{{.CompletedLength}} {{.DownloadSpeed}}/s {{.ConsumingTime}}`,
+		Saucer:         "=",
+		SaucerHead:     ">",
+		SaucerPadding:  "-",
+		BarStart:       "[",
+		BarEnd:         "]",
+		BarWidth:       80,
 	},
 	FriendlyFormat: true,
 	Hide:           false,
@@ -140,10 +144,15 @@ func (barhook *BarHook) Make(stat *Stat) (Hook, error) {
 
 	// 解析模版
 	var err error
-	tmpBarhook.Template.template, err = template.New("downBarTemplate").Parse(tmpBarhook.Template.Template)
+	if stat.TotalLength == 0 {
+		tmpBarhook.Template.template, err = template.New("downBarTemplate").Parse(tmpBarhook.Template.NoSizeTemplate)
+	} else {
+		tmpBarhook.Template.template, err = template.New("downBarTemplate").Parse(tmpBarhook.Template.Template)
+	}
 	if err != nil {
 		return nil, err
 	}
+
 	// 首次处理数据
 	tmpBarhook.receiveStat(stat)
 	return &tmpBarhook, nil
@@ -267,10 +276,6 @@ func (barhook *BarHook) Finish(stat *Stat) error {
 	barhook.render()
 	fmt.Println()
 	return nil
-}
-
-func (barhook *BarHook) PrintStat(stat *BarStatString) {
-	fmt.Fprintf(barhook.Stdout, "\r%3s%% %7s/%7s %7s/s %5s %5s conn: %2s", stat.Progress, stat.CompletedLength, stat.TotalLength, stat.DownloadSpeed, stat.EstimatedTime, stat.ConsumingTime, stat.Connections)
 }
 
 // receiveStat 处理 Stat
