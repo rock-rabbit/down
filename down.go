@@ -1,11 +1,13 @@
 package down
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"mime"
 	"net/http"
 	"net/url"
@@ -67,6 +69,8 @@ type Down struct {
 	ThreadCount int
 	// ThreadSize 多线程下载时每个线程下载的字节数
 	ThreadSize int64
+	// CreateDir 当需要创建目录时，是否创建目录，默认为 true
+	CreateDir bool
 	// Replace 遇到相同文件时是否要强制替换
 	Replace bool
 	// Resume 是否每次都重新下载,不尝试断点续传
@@ -126,7 +130,8 @@ func New() *Down {
 	return &Down{
 		PerHooks:       make([]PerHook, 0),
 		ThreadCount:    1,
-		ThreadSize:     4194304,
+		ThreadSize:     1048576,
+		CreateDir:      true,
 		Replace:        true,
 		Resume:         true,
 		ConnectTimeout: time.Second * 60,
@@ -235,7 +240,7 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 	if outputName == "" {
 		outputName = ins.filename
 	}
-	outputPath, err = filepath.Abs(filepath.Join(meta.OutputDir, outputName))
+	outputPath, err = filepath.Abs(filepath.Join(ins.meta.OutputDir, outputName))
 	if err != nil {
 		return fmt.Errorf("down error: filepath.Abs: %s", err)
 	}
@@ -250,6 +255,10 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 			return fmt.Errorf("down error: Remove file: %s", err)
 		}
 	}
+	// 目录不存在时创建目录
+	if ins.down.CreateDir && !fileExist(ins.meta.OutputDir) {
+		os.MkdirAll(ins.meta.OutputDir, os.ModePerm)
+	}
 	// 单线程下载逻辑
 	if !ins.multithread || ins.down.ThreadCount <= 1 {
 		f, err := os.OpenFile(outputPath, os.O_CREATE|os.O_RDWR, ins.meta.Perm)
@@ -257,6 +266,10 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 			return fmt.Errorf("down error: Open file: %s", err)
 		}
 		defer f.Close()
+
+		if err := f.Truncate(ins.size); err != nil {
+			return err
+		}
 
 		req, err := ins.request(http.MethodGet, ins.meta.URI, nil)
 		if err != nil {
@@ -290,8 +303,85 @@ func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
 		ins.finishHook()
 		return nil
 	}
+	// 多线程下载逻辑
+	f, err := os.OpenFile(outputPath, os.O_CREATE|os.O_RDWR, ins.meta.Perm)
+	if err != nil {
+		return fmt.Errorf("down error: Open file: %s", err)
+	}
+	defer f.Close()
 
+	if err := f.Truncate(ins.size); err != nil {
+		return err
+	}
+	// 拆分任务
+	task := threadTaskSplit(ins.size, ins.down.ThreadSize)
+	// 任务执行
+	groupPool := NewWaitGroupPool(ins.down.ThreadCount)
+	done := make(chan int)
+	cherr := make(chan error)
+	// 每秒给 Hook 发送信息
+	go ins.sendStat(ctx, 1)
+	go func() {
+		for _, fileRange := range task {
+			groupPool.Add()
+			go ins.threadTask(groupPool, cherr, f, fileRange[0], fileRange[1])
+		}
+		groupPool.Wait()
+		done <- 1
+	}()
+
+Loop:
+	select {
+	case err = <-cherr:
+		return err
+	case <-done:
+		break Loop
+	}
+	ins.finishHook()
 	return nil
+}
+
+// threadTask 单个线程的下载逻辑
+func (operat *operation) threadTask(groupPool *WaitGroupPool, cherr chan error, f *os.File, rangeStart, rangeEnd int64) {
+	defer groupPool.Done()
+	req, err := operat.request(http.MethodGet, operat.meta.URI, operat.meta.Body)
+	if err != nil {
+		cherr <- fmt.Errorf("down error: Request: %s", err)
+		return
+	}
+	req.Header.Set("range", fmt.Sprintf("bytes=%d-%d", rangeStart, rangeEnd))
+	res, err := operat.do(req)
+	if err != nil {
+		cherr <- fmt.Errorf("down error: Request Do: %s", err)
+		return
+	}
+	defer res.Body.Close()
+	bufSize := (rangeEnd - rangeStart) + 1
+
+	buf := bytes.NewBuffer(make([]byte, 0, bufSize))
+	// 使用代理 io 写入文件
+	_, err = io.Copy(buf, &ioProxyReader{reader: res.Body, send: func(n int) {
+		select {
+		case <-operat.ctx.Done():
+			res.Body.Close()
+		default:
+			atomic.AddInt64(operat.stat.CompletedLength, int64(n))
+		}
+	}})
+	if err != nil {
+		cherr <- fmt.Errorf("down error: io.Copy: %s", err)
+		return
+	}
+	// 写入到文件
+	n, err := f.WriteAt(buf.Bytes(), rangeStart)
+	if err != nil {
+		cherr <- err
+		return
+	}
+	if int64(n) != bufSize {
+		cherr <- fmt.Errorf("down error: bytes=%d-%d 写入数据为 %d 字节，与预计 %d 字节不符", rangeStart, rangeEnd, n, bufSize)
+		return
+	}
 }
 
 // copyHooks 拷贝 Hook ，防止使用 Hook 中途发生变化
@@ -454,6 +544,31 @@ func (operat *operation) baseInfo() error {
 	}
 
 	return nil
+}
+
+// threadTask 多线程任务分割
+func threadTaskSplit(size, threadSize int64) [][2]int64 {
+	// size - 1 是因为范围是从 0 开始，需要提前减去
+	size = size - 1
+
+	taskCountFloat64 := float64(size) / float64(threadSize)
+	if math.Trunc(taskCountFloat64) != taskCountFloat64 {
+		taskCountFloat64++
+	}
+	taskCount := int(taskCountFloat64)
+	task := make([][2]int64, int(taskCount))
+	for i := 0; i < taskCount; i++ {
+		if i == 0 {
+			task[i][0] = int64(i) * threadSize
+		} else {
+			task[i][0] = int64(i)*threadSize + 1
+		}
+		task[i][1] = (int64(i) + 1) * threadSize
+		if task[i][1] > size {
+			task[i][1] = size
+		}
+	}
+	return task
 }
 
 // getFileName 自动获取资源文件名称
