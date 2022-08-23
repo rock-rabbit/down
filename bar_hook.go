@@ -118,7 +118,7 @@ type BarHook struct {
 
 var DefaultBarHook = &BarHook{
 	Template: &BarTemplate{
-		Template:       `{{.CompletedLength}} / {{.TotalLength}} {{.Saucer}} {{.Progress}}% {{.DownloadSpeed}}/s {{.EstimatedTime}} conn:{{.Connections}}`,
+		Template:       `{{.CompletedLength}} / {{.TotalLength}} {{.Saucer}} {{.Progress}}% {{.DownloadSpeed}}/s {{.EstimatedTime}} CN:{{.Connections}}`,
 		NoSizeTemplate: `{{.CompletedLength}} {{.DownloadSpeed}}/s {{.ConsumingTime}}`,
 		Saucer:         "=",
 		SaucerHead:     ">",
