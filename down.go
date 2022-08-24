@@ -13,16 +13,22 @@ import (
 type Down struct {
 	// PerHooks 是返回下载进度的钩子，默认为空
 	PerHooks []PerHook
-	// ThreadCount 多线程下载时最多同时下载一个文件的线程，默认为 1
+	// ThreadCount 多线程下载时最多同时下载一个文件的最大线程，默认为 1
 	ThreadCount int
-	// ThreadSize 多线程下载时每个线程下载的字节数，默认为 1048576
+	// ThreadSize 多线程下载时每个线程下载的大小，每个线程都会有一个自己下载大小的缓冲区，默认为 20M
 	ThreadSize int64
+	// DiskCache 磁盘缓冲区大小，这只在一个线程下载时有用，默认为 16M
+	DiskCache int
+	// SpeedLimit 下载速度限制，默认为 0 无限制
+	SpeedLimit int
 	// CreateDir 当需要创建目录时，是否创建目录，默认为 true
 	CreateDir bool
-	// Replace 遇到相同文件时是否要强制替换，默认为 true
-	Replace bool
-	// Resume 是否每次都重新下载,不尝试断点续传，默认为 true
-	Resume bool
+	// AllowOverwrite 是否允许覆盖文件，默认为 true
+	AllowOverwrite bool
+	// AutoFileRenaming 文件自动重命名，新文件名在名称之后扩展名之前加上一个点和一个数字（1..9999）。默认:true
+	AutoFileRenaming bool
+	// Continue 是否启用断点下载，默认为 true
+	Continue bool
 	// ConnectTimeout HTTP 连接请求的超时时间，默认为 5 秒
 	ConnectTimeout time.Duration
 	// Timeout 下载总超时时间，默认为 10 分钟
@@ -47,19 +53,22 @@ var (
 // New 创建一个默认的下载器
 func New() *Down {
 	return &Down{
-		PerHooks:       make([]PerHook, 0),
-		ThreadCount:    1,
-		ThreadSize:     1048576,
-		CreateDir:      true,
-		Replace:        true,
-		Resume:         true,
-		ConnectTimeout: time.Second * 5,
-		Timeout:        time.Minute * 10,
-		RetryNumber:    5,
-		RetryTime:      0,
-		Proxy:          http.ProxyFromEnvironment,
-		TempFileExt:    "down",
-		mux:            sync.Mutex{},
+		PerHooks:         make([]PerHook, 0),
+		ThreadCount:      1,
+		ThreadSize:       20971520,
+		DiskCache:        16777216,
+		SpeedLimit:       0,
+		CreateDir:        true,
+		AllowOverwrite:   true,
+		Continue:         true,
+		AutoFileRenaming: true,
+		ConnectTimeout:   time.Second * 5,
+		Timeout:          time.Minute * 10,
+		RetryNumber:      5,
+		RetryTime:        0,
+		Proxy:            http.ProxyFromEnvironment,
+		TempFileExt:      "down",
+		mux:              sync.Mutex{},
 	}
 }
 

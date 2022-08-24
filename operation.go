@@ -1,6 +1,7 @@
 package down
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -86,8 +87,8 @@ func (operat *operation) start() error {
 	}
 	// 文件是否存在, 这里之后支持断点续传后需要改逻辑
 	if fileExist(operat.outputPath) {
-		if !operat.down.Replace {
-			return fmt.Errorf("已存在文件 %s，若要强制替换文件请将 down.Replace 设为 true", operat.outputPath)
+		if !operat.down.AllowOverwrite {
+			return fmt.Errorf("已存在文件 %s，若要强制替换文件请将 down.AllowOverwrite 设为 true", operat.outputPath)
 		}
 		// 需要强制覆盖, 删除掉原文件
 		err = os.Remove(operat.outputPath)
@@ -144,6 +145,8 @@ func (operat *operation) multithreading() error {
 	}()
 	// 等待下载完成或失败
 	select {
+	case <-operat.ctx.Done():
+		return errors.New("context 关闭")
 	case <-timeoutCtx.Done():
 		return errors.New("超时")
 	case err = <-cherr:
@@ -219,13 +222,15 @@ func (operat *operation) singleThread() error {
 		return fmt.Errorf("request Do: %s", err)
 	}
 	defer res.Body.Close()
-
-	timeoutCtx, timeoutCancel := context.WithTimeout(operat.ctx, operat.down.Timeout)
+	// 超时上下文，控制超时时间
+	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), operat.down.Timeout)
 	defer timeoutCancel()
 	// 每秒给 Hook 发送信息
 	go operat.sendStat(timeoutCtx, nil)
+	// 磁盘缓冲区
+	bufWriter := bufio.NewWriterSize(f, operat.down.DiskCache)
 	// 使用代理 io 写入文件
-	_, err = io.Copy(f, &ioProxyReader{reader: res.Body, send: func(n int) {
+	_, err = io.Copy(bufWriter, &ioProxyReader{reader: res.Body, send: func(n int) {
 		select {
 		case <-timeoutCtx.Done():
 			res.Body.Close()
@@ -233,7 +238,12 @@ func (operat *operation) singleThread() error {
 			atomic.AddInt64(operat.stat.CompletedLength, int64(n))
 		}
 	}})
+	// 缓冲数据写入到磁盘
+	bufWriter.Flush()
+	// 判断是否有错误
 	select {
+	case <-operat.ctx.Done():
+		return fmt.Errorf("context 关闭")
 	case <-timeoutCtx.Done():
 		return fmt.Errorf("超时")
 	default:
