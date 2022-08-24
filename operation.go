@@ -114,6 +114,35 @@ func (operat *operation) start() error {
 	return nil
 }
 
+// happenError 当出现错误时的处理方式
+func (operat *operation) happenError(done <-chan int, f *os.File, cf *controlfile) {
+	// 等待线程处理完成
+	<-done
+	// 保存控制文件
+	operat.saveControlfile(f, cf)
+}
+
+// autoSaveControlfile 自动保存控制文件
+func (operat *operation) autoSaveControlfile(ctx context.Context, f *os.File, cf *controlfile) {
+Loop:
+	for {
+		select {
+		case <-ctx.Done():
+			break Loop
+		default:
+			operat.saveControlfile(f, cf)
+		}
+		time.Sleep(operat.down.AutoSaveTnterval)
+	}
+}
+
+// saveControlfile 保存控制文件
+func (operat *operation) saveControlfile(f *os.File, cf *controlfile) {
+	cf.completedLength = uint64(atomic.LoadInt64(operat.stat.CompletedLength))
+	f.Seek(0, 0)
+	io.Copy(f, cf.Encoding())
+}
+
 // multithreading 多线程下载
 func (operat *operation) multithreading() error {
 	f, err := os.OpenFile(operat.outputPath, os.O_CREATE|os.O_RDWR, operat.meta.Perm)
@@ -126,19 +155,40 @@ func (operat *operation) multithreading() error {
 		return err
 	}
 	// 拆分任务
-	task := threadTaskSplit(operat.size, operat.down.ThreadSize)
+	task := threadTaskSplit(operat.size, int64(operat.down.ThreadSize))
 	// 任务执行
 	groupPool := NewWaitGroupPool(operat.down.ThreadCount)
 	done := make(chan int)
 	cherr := make(chan error)
+	// 创建控制文件
+	cf := newControlfile(len(task))
+	cf.threadSize = uint32(operat.down.ThreadSize)
+	cf.totalLength = uint64(operat.size)
+	controlfilePath := fmt.Sprintf("%s.%s", operat.outputPath, operat.down.TempFileExt)
+	controlfile, err := os.OpenFile(controlfilePath, os.O_CREATE|os.O_RDWR, operat.meta.Perm)
+	if err != nil {
+		return fmt.Errorf("open file: %s", err)
+	}
+	defer controlfile.Close()
+	// 超时上下文，控制超时时间
 	timeoutCtx, timeoutCancel := context.WithTimeout(operat.ctx, operat.down.Timeout)
 	defer timeoutCancel()
+	// 自动保存控制文件
+	go operat.autoSaveControlfile(timeoutCtx, controlfile, cf)
 	// 每秒给 Hook 发送信息
 	go operat.sendStat(timeoutCtx, groupPool)
 	go func() {
-		for _, fileRange := range task {
+	Loop:
+		for idx, fileRange := range task {
 			groupPool.Add()
-			go operat.threadTask(timeoutCtx, groupPool, cherr, f, fileRange[0], fileRange[1])
+			select {
+			case <-timeoutCtx.Done():
+				// 被取消掉了
+				groupPool.Done()
+				break Loop
+			default:
+			}
+			go operat.threadTask(timeoutCtx, groupPool, cherr, f, cf.threadblock[idx], fileRange[0], fileRange[1])
 		}
 		groupPool.Wait()
 		done <- 1
@@ -146,20 +196,27 @@ func (operat *operation) multithreading() error {
 	// 等待下载完成或失败
 	select {
 	case <-operat.ctx.Done():
+		operat.happenError(done, controlfile, cf)
 		return errors.New("context 关闭")
 	case <-timeoutCtx.Done():
+		operat.happenError(done, controlfile, cf)
 		return errors.New("超时")
 	case err = <-cherr:
+		operat.happenError(done, controlfile, cf)
 		return err
 	case <-done:
 		break
 	}
+	// 发送成功 Hook
 	operat.finishHook()
+	// 删除控制文件
+	controlfile.Close()
+	os.Remove(controlfilePath)
 	return nil
 }
 
 // threadTask 多线程下载中单个线程的下载逻辑
-func (operat *operation) threadTask(ctx context.Context, groupPool *WaitGroupPool, cherr chan error, f *os.File, rangeStart, rangeEnd int64) {
+func (operat *operation) threadTask(ctx context.Context, groupPool *WaitGroupPool, cherr chan error, f *os.File, tb *threadblock, rangeStart, rangeEnd int64) {
 	defer groupPool.Done()
 	req, err := operat.request(http.MethodGet, operat.meta.URI, operat.meta.Body)
 	if err != nil {
@@ -185,12 +242,23 @@ func (operat *operation) threadTask(ctx context.Context, groupPool *WaitGroupPoo
 			atomic.AddInt64(operat.stat.CompletedLength, int64(n))
 		}
 	}})
-	if err != nil {
-		cherr <- fmt.Errorf("io.Copy: %s", err)
+	select {
+	case <-ctx.Done():
+		// 如果被取消，将缓冲区的数据写入到文件
+		data := buf.Bytes()
+		tb.completedLength = uint32(len(data))
+		f.WriteAt(data, rangeStart)
 		return
+	default:
+		if err != nil {
+			cherr <- fmt.Errorf("io.Copy: %s", err)
+			return
+		}
 	}
 	// 写入到文件
-	n, err := f.WriteAt(buf.Bytes(), rangeStart)
+	data := buf.Bytes()
+	tb.completedLength = uint32(len(data))
+	n, err := f.WriteAt(data, rangeStart)
 	if err != nil {
 		cherr <- err
 		return

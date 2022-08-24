@@ -16,7 +16,7 @@ type Down struct {
 	// ThreadCount 多线程下载时最多同时下载一个文件的最大线程，默认为 1
 	ThreadCount int
 	// ThreadSize 多线程下载时每个线程下载的大小，每个线程都会有一个自己下载大小的缓冲区，默认为 20M
-	ThreadSize int64
+	ThreadSize int
 	// DiskCache 磁盘缓冲区大小，这只在一个线程下载时有用，默认为 16M
 	DiskCache int
 	// SpeedLimit 下载速度限制，默认为 0 无限制
@@ -29,6 +29,8 @@ type Down struct {
 	AutoFileRenaming bool
 	// Continue 是否启用断点下载，默认为 true
 	Continue bool
+	// AutoSaveTnterval 自动保存控制文件的时间，默认为 20 秒
+	AutoSaveTnterval time.Duration
 	// ConnectTimeout HTTP 连接请求的超时时间，默认为 5 秒
 	ConnectTimeout time.Duration
 	// Timeout 下载总超时时间，默认为 10 分钟
@@ -62,6 +64,7 @@ func New() *Down {
 		AllowOverwrite:   true,
 		Continue:         true,
 		AutoFileRenaming: true,
+		AutoSaveTnterval: time.Second * 20,
 		ConnectTimeout:   time.Second * 5,
 		Timeout:          time.Minute * 10,
 		RetryNumber:      5,
