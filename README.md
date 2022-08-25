@@ -63,21 +63,21 @@ func main(){
 ## 🔗 目录结构
 ```
 .
-├── LICENSE			开源协议 MIT
-├── Makefile		快捷命令
-├── README.md		说明文件
-├── bar_hook.go		控制台进度条 Hook
-├── controlfile.go	控制文件
-├── down.go			下载器配置
+├── LICENSE         开源协议 MIT
+├── Makefile        快捷命令
+├── README.md       说明文件
+├── bar_hook.go     控制台进度条 Hook
+├── controlfile.go  控制文件
+├── down.go         下载器配置
 ├── go.mod
-├── hook.go			定义 Hook 接口
-├── meta.go			基本下载信息
-├── mime.go			识别文件头
-├── operation.go	具体的下载实现
-├── pool.go			线程池
-├── rate.go			限流器
-├── request.go		网络请求
-└── utils.go		一些工具
+├── hook.go         定义 Hook 接口
+├── meta.go         基本下载信息
+├── mime.go         识别文件头
+├── operation.go    具体的下载实现
+├── pool.go         线程池
+├── rate.go         限流器
+├── request.go      网络请求
+└── utils.go        一些工具
 ```
 
 ## 📄 控制文件
