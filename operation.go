@@ -21,18 +21,30 @@ import (
 type operation struct {
 	down *Down
 	meta *Meta
+
 	// hooks 通过 Down 的 PerHook 生成的 Hook
 	hooks []Hook
+
 	// client 通过 Down 配置生成 *http.Client
 	client *http.Client
+
 	// size 文件大小
 	size int64
+
 	// multithread 是否使用多线程下载
 	multithread bool
+
 	// filename 从 URI 和 头信息 中获得的文件名称, 未指定名称时使用
 	filename string
+
 	// outputPath 最终文件的位置
 	outputPath string
+
+	// controlfilePath 控制文件位置
+	controlfilePath string
+	// cf 读取到的控制文件
+	cf *controlfile
+
 	// ctx 上下文
 	ctx context.Context
 
@@ -61,21 +73,93 @@ type stating struct {
 	CompletedLength *int64
 }
 
-func (operat *operation) start() error {
-	// 初始化操作
-	operat.init()
+// init 初始化，down 配置的应用
+func (operat *operation) init() error {
+	operat.client = &http.Client{
+		Transport: &http.Transport{
+			// 应用来自环境变量的代理
+			Proxy: operat.down.Proxy,
+			// 要求服务器返回非压缩的内容，前提是没有发送 accept-encoding 来接管 transport 的自动处理
+			DisableCompression: true,
+			// 等待响应头的超时时间
+			ResponseHeaderTimeout: operat.down.ConnectTimeout,
+			// TLS 握手超时时间
+			TLSHandshakeTimeout: 10 * time.Second,
+			// 接受服务器提供的任何证书
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+		// 超时时间
+		Timeout: 0,
+	}
+
+	var err error
+
 	// 读取文件基础信息
-	operat.baseInfo()
+	err = operat.baseInfo()
+	if err != nil {
+		return err
+	}
+
 	// 文件存储路径
 	outputName := operat.meta.OutputName
 	if outputName == "" {
 		outputName = operat.filename
 	}
-	var err error
 	operat.outputPath, err = filepath.Abs(filepath.Join(operat.meta.OutputDir, outputName))
 	if err != nil {
 		return fmt.Errorf("filepath.Abs: %s", err)
 	}
+	operat.controlfilePath = fmt.Sprintf("%s.%s", operat.outputPath, operat.down.TempFileExt)
+
+	// 文件是否存在, 这里之后支持断点续传后需要改逻辑
+	outputPathExist := fileExist(operat.outputPath)
+	// 清理文件
+	clearFile := func() error {
+		// 强制覆盖文件，清理文件
+		err = os.Remove(operat.outputPath)
+		if err != nil {
+			return fmt.Errorf("remove file: %s", err)
+		}
+		err = os.Remove(operat.controlfilePath)
+		if err != nil {
+			return fmt.Errorf("remove file: %s", err)
+		}
+		return nil
+	}
+
+	if outputPathExist && operat.down.Continue && fileExist(operat.controlfilePath) {
+		// 可以使用断点下载 并且 存在控制文件
+		data, err := os.ReadFile(operat.controlfilePath)
+		if err != nil {
+			return err
+		}
+		cf := readControlfile(data)
+		// 控制文件解析，解析失败允许删除则删除
+		if (cf == nil || cf.totalLength != uint64(operat.size)) && outputPathExist {
+			err = clearFile()
+			if err != nil {
+				return err
+			}
+		} else if cf == nil {
+			return fmt.Errorf("已存在文件 %s，若要强制替换文件请将 down.AllowOverwrite 设为 true", operat.outputPath)
+		}
+		// 解析成功
+		operat.cf = cf
+	} else if outputPathExist && operat.down.AllowOverwrite {
+		// 强制覆盖文件，清理文件
+		err = clearFile()
+		if err != nil {
+			return err
+		}
+	} else if outputPathExist {
+		return fmt.Errorf("已存在文件 %s，若要强制替换文件请将 down.AllowOverwrite 设为 true", operat.outputPath)
+	}
+
+	// 目录不存在时创建目录
+	if operat.down.CreateDir && !fileExist(operat.meta.OutputDir) {
+		os.MkdirAll(operat.meta.OutputDir, os.ModePerm)
+	}
+
 	// 生成 Hook
 	operat.hooks = make([]Hook, len(operat.down.PerHooks))
 	stat := &Stat{Down: operat.down, Meta: operat.meta, TotalLength: operat.size, OutputPath: operat.outputPath}
@@ -85,21 +169,50 @@ func (operat *operation) start() error {
 			return fmt.Errorf("Make Hook: %s", err)
 		}
 	}
-	// 文件是否存在, 这里之后支持断点续传后需要改逻辑
-	if fileExist(operat.outputPath) {
-		if !operat.down.AllowOverwrite {
-			return fmt.Errorf("已存在文件 %s，若要强制替换文件请将 down.AllowOverwrite 设为 true", operat.outputPath)
-		}
-		// 需要强制覆盖, 删除掉原文件
-		err = os.Remove(operat.outputPath)
-		if err != nil {
-			return fmt.Errorf("remove file: %s", err)
+	return nil
+}
+
+// baseInfo 获取资源基础信息，多线程支持的判断
+func (operat *operation) baseInfo() error {
+	res, err := operat.rangeDo(0, 9)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	contentType := res.Header.Get("content-type")
+	contentDisposition := res.Header.Get("content-disposition")
+	contentRange := res.Header.Get("content-range")
+	contentLength := res.Header.Get("content-length")
+	acceptRanges := res.Header.Get("accept-ranges")
+	headinfo := []byte{}
+
+	// 获取文件总大小
+	rangeList := strings.Split(contentRange, "/")
+	if len(rangeList) > 1 {
+		operat.size, _ = strconv.ParseInt(rangeList[1], 10, 64)
+	}
+
+	// 是否可以使用多线程
+	if acceptRanges != "" || strings.Contains(contentRange, "bytes") || contentLength == "10" {
+		headinfo, _ = io.ReadAll(res.Body)
+		operat.multithread = true
+	} else {
+		// 不支持多线程重新获取文件总大小
+		if operat.size == 0 {
+			operat.size, _ = strconv.ParseInt(contentLength, 10, 64)
 		}
 	}
-	// 目录不存在时创建目录
-	if operat.down.CreateDir && !fileExist(operat.meta.OutputDir) {
-		os.MkdirAll(operat.meta.OutputDir, os.ModePerm)
-	}
+
+	// 自动获取文件名称
+	operat.filename = getFileName(operat.meta.URI, contentDisposition, contentType, headinfo)
+
+	return nil
+}
+
+func (operat *operation) start() error {
+	// 初始化操作
+	operat.init()
 	// 单线程下载逻辑
 	if !operat.multithread || operat.down.ThreadCount <= 1 {
 		if err := operat.singleThread(); err != nil {
@@ -218,29 +331,21 @@ func (operat *operation) multithreading() error {
 // threadTask 多线程下载中单个线程的下载逻辑
 func (operat *operation) threadTask(ctx context.Context, groupPool *WaitGroupPool, cherr chan error, f *os.File, tb *threadblock, rangeStart, rangeEnd int64) {
 	defer groupPool.Done()
-	req, err := operat.request(http.MethodGet, operat.meta.URI, operat.meta.Body)
+
+	res, err := operat.rangeDo(rangeStart, rangeEnd)
 	if err != nil {
-		cherr <- fmt.Errorf("request: %s", err)
-		return
-	}
-	req.Header.Set("range", fmt.Sprintf("bytes=%d-%d", rangeStart, rangeEnd))
-	res, err := operat.do(req)
-	if err != nil {
-		cherr <- fmt.Errorf("request Do: %s", err)
+		cherr <- err
 		return
 	}
 	defer res.Body.Close()
+
 	bufSize := (rangeEnd - rangeStart) + 1
 
 	buf := bytes.NewBuffer(make([]byte, 0, bufSize))
+
 	// 使用代理 io 写入文件
 	_, err = io.Copy(buf, &ioProxyReader{reader: res.Body, send: func(n int) {
-		select {
-		case <-ctx.Done():
-			res.Body.Close()
-		default:
-			atomic.AddInt64(operat.stat.CompletedLength, int64(n))
-		}
+		go atomic.AddInt64(operat.stat.CompletedLength, int64(n))
 	}})
 	select {
 	case <-ctx.Done():
@@ -276,20 +381,16 @@ func (operat *operation) singleThread() error {
 		return fmt.Errorf("open file: %s", err)
 	}
 	defer f.Close()
-
 	if err := f.Truncate(operat.size); err != nil {
 		return err
 	}
 
-	req, err := operat.request(http.MethodGet, operat.meta.URI, nil)
+	res, err := operat.defaultDo(nil)
 	if err != nil {
-		return fmt.Errorf("request: %s", err)
-	}
-	res, err := operat.do(req)
-	if err != nil {
-		return fmt.Errorf("request Do: %s", err)
+		return err
 	}
 	defer res.Body.Close()
+
 	// 超时上下文，控制超时时间
 	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), operat.down.Timeout)
 	defer timeoutCancel()
@@ -389,114 +490,4 @@ Loop:
 		}
 		time.Sleep(time.Second)
 	}
-}
-
-// init 初始化，down 配置的应用
-func (operat *operation) init() {
-	operat.client = &http.Client{
-		Transport: &http.Transport{
-			// 应用来自环境变量的代理
-			Proxy: operat.down.Proxy,
-			// 要求服务器返回非压缩的内容，前提是没有发送 accept-encoding 来接管 transport 的自动处理
-			DisableCompression: true,
-			// 等待响应头的超时时间
-			ResponseHeaderTimeout: operat.down.ConnectTimeout,
-			// TLS 握手超时时间
-			TLSHandshakeTimeout: 10 * time.Second,
-			// 接受服务器提供的任何证书
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-		// 超时时间
-		Timeout: 0,
-	}
-
-}
-
-// request 对于 http.NewRequestWithContext 的包装
-func (operat *operation) request(method string, url string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(operat.ctx, method, url, body)
-	if err != nil {
-		return nil, err
-	}
-
-	header := make(http.Header, len(operat.meta.Header))
-
-	for k, v := range operat.meta.Header {
-		tmpVal := make([]string, len(v))
-		copy(tmpVal, v)
-		header[k] = v
-	}
-
-	req.Header = header
-
-	return req, nil
-}
-
-// do 对于 client.Do 的包装，主要实现重试机制
-func (operat *operation) do(rsequest *http.Request) (*http.Response, error) {
-	// 请求失败时，重试机制
-	var (
-		res          *http.Response
-		requestError error
-		retryNum     = 0
-	)
-	for ; ; retryNum++ {
-		res, requestError = operat.client.Do(rsequest)
-		if requestError == nil && res.StatusCode < 400 {
-			break
-		} else if retryNum+1 >= operat.down.RetryNumber {
-			var err error
-			if requestError != nil {
-				err = fmt.Errorf("down error: %v", requestError)
-			} else {
-				err = fmt.Errorf("down error: %s HTTP %d", operat.meta.URI, res.StatusCode)
-			}
-			return nil, err
-		}
-		time.Sleep(operat.down.RetryTime)
-	}
-	return res, nil
-
-}
-
-// baseInfo 获取资源基础信息，多线程支持的判断
-func (operat *operation) baseInfo() error {
-	req, err := operat.request(operat.meta.Method, operat.meta.URI, operat.meta.Body)
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("range", "bytes=0-9")
-
-	res, err := operat.do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-
-	contentRange := res.Header.Get("content-range")
-
-	rangeList := strings.Split(contentRange, "/")
-
-	if len(rangeList) > 1 {
-		operat.size, _ = strconv.ParseInt(rangeList[1], 10, 64)
-	}
-	// 文件名称
-	contentDisposition := res.Header.Get("content-disposition")
-	contentType := res.Header.Get("content-type")
-
-	// 是否可以使用多线程
-	if res.Header.Get("accept-ranges") != "" || strings.Contains(contentRange, "bytes") || res.Header.Get("content-length") == "10" {
-		headinfo, _ := io.ReadAll(res.Body)
-		operat.filename = getFileName(operat.meta.URI, contentDisposition, contentType, headinfo)
-		operat.multithread = true
-	} else {
-		// 没有获取到 size ，大概率是因为不支持范围获取数据
-		if operat.size == 0 {
-			operat.size, _ = strconv.ParseInt(res.Header.Get("content-length"), 10, 64)
-		}
-		operat.filename = getFileName(operat.meta.URI, contentDisposition, contentType, []byte{})
-	}
-
-	return nil
 }
