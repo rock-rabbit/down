@@ -3,6 +3,7 @@ package down_test
 import (
 	"log"
 	"testing"
+	"time"
 
 	"github.com/rock-rabbit/down"
 )
@@ -16,6 +17,7 @@ func TestDown(t *testing.T) {
 	down.Default.AddHook(down.DefaultBarHook)
 	down.Default.ThreadSize = 1024 << 10
 	down.Default.ThreadCount = 2
+	down.Default.Timeout = time.Second * 50
 	// 执行下载, 你也可以使用 RunContext 传递一个 Context
 	err := down.Default.Run(meta)
 	if err != nil {

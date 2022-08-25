@@ -135,9 +135,6 @@ func formatFileSize(fileSize int64) (size string) {
 
 // threadTask 多线程任务分割
 func threadTaskSplit(size, threadSize int64) [][2]int64 {
-	// size - 1 是因为范围是从 0 开始，需要提前减去
-	size = size - 1
-
 	taskCountFloat64 := float64(size) / float64(threadSize)
 	if math.Trunc(taskCountFloat64) != taskCountFloat64 {
 		taskCountFloat64++
@@ -145,14 +142,11 @@ func threadTaskSplit(size, threadSize int64) [][2]int64 {
 	taskCount := int(taskCountFloat64)
 	task := make([][2]int64, int(taskCount))
 	for i := 0; i < taskCount; i++ {
-		if i == 0 {
-			task[i][0] = int64(i) * threadSize
-		} else {
-			task[i][0] = int64(i)*threadSize + 1
-		}
-		task[i][1] = (int64(i) + 1) * threadSize
-		if task[i][1] > size {
-			task[i][1] = size
+		task[i][0] = int64(i) * threadSize
+
+		task[i][1] = int64(i+1)*threadSize - 1
+		if task[i][1] >= size {
+			task[i][1] = size - 1
 		}
 	}
 	return task

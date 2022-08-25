@@ -246,7 +246,6 @@ func (barhook *BarHook) render() error {
 			saucerHead = barhook.Template.Saucer
 		}
 		saucerBuffer.WriteString(saucerHead)
-
 		saucerBuffer.WriteString(strings.Repeat(barhook.Template.SaucerPadding, width-saucerCount))
 
 		saucerBuffer.WriteString(barEnd)

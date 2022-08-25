@@ -149,6 +149,8 @@ func (operat *operation) init() error {
 		}
 		// 解析成功
 		operat.cf = cf
+		atomic.SwapInt64(operat.stat.CompletedLength, int64(operat.cf.completedLength))
+
 	} else if outputPathExist && operat.down.AllowOverwrite {
 		// 强制覆盖文件，清理文件
 		err = clearFile()
@@ -318,42 +320,56 @@ func (operat *operation) multithreading() {
 	done := make(chan int)
 	cherr := make(chan error)
 
-	// 出现错误的措施
-	defer func() {
-		select {
-		case <-operat.ctx.Done():
-			operat.happenError(done, cfIns, cf)
-		case err = <-cherr:
-			operat.happenError(done, cfIns, cf)
-		default:
-		}
-	}()
-
 	// 自动保存控制文件
 	go operat.autoSaveControlfile(cfIns, cf)
 	// 每秒给 Hook 发送信息
 	go operat.sendStat(groupPool)
 
-	go func() {
-		for idx, fileRange := range task {
-			groupPool.Add()
-			// 被通知关闭了
-			if operat.contextIsDone() {
-				groupPool.Done()
-				break
+	var downFunc func()
+	if operat.cf == nil {
+		downFunc = func() {
+			for idx, fileRange := range task {
+				groupPool.Add()
+				// 被通知关闭了
+				if operat.contextIsDone() {
+					groupPool.Done()
+					break
+				}
+				go operat.threadTask(groupPool, cherr, f, cf.threadblock[idx], fileRange[0], fileRange[1], 0)
 			}
-			go operat.threadTask(groupPool, cherr, f, cf.threadblock[idx], fileRange[0], fileRange[1])
+			groupPool.Wait()
+			done <- 1
 		}
-		groupPool.Wait()
-		done <- 1
-	}()
+	} else {
+		downFunc = func() {
+			for idx, tb := range operat.cf.threadblock {
+				// 当前线程是否已完成
+				completedLength := int64(tb.completedLength)
+				if completedLength == (task[idx][1]-task[idx][0])+1 {
+					continue
+				}
+				groupPool.Add()
+				// 被通知关闭了
+				if operat.contextIsDone() {
+					groupPool.Done()
+					break
+				}
+				go operat.threadTask(groupPool, cherr, f, cf.threadblock[idx], task[idx][0], task[idx][1], completedLength)
+			}
+			groupPool.Wait()
+			done <- 1
+		}
+	}
+	go downFunc()
 
 	// 等待下载完成或失败
 	select {
 	case <-operat.ctx.Done():
+		operat.happenError(done, cfIns, cf)
 		operat.done <- errors.New("context 关闭")
 		return
 	case err = <-cherr:
+		operat.happenError(done, cfIns, cf)
 		operat.done <- err
 		return
 	case <-done:
@@ -369,8 +385,10 @@ func (operat *operation) multithreading() {
 }
 
 // threadTask 多线程下载中单个线程的下载逻辑
-func (operat *operation) threadTask(groupPool *WaitGroupPool, cherr chan error, f *os.File, tb *threadblock, rangeStart, rangeEnd int64) {
+func (operat *operation) threadTask(groupPool *WaitGroupPool, cherr chan error, f *os.File, tb *threadblock, rangeStart, rangeEnd, completed int64) {
 	defer groupPool.Done()
+
+	rangeStart = rangeStart + completed
 
 	res, err := operat.rangeDo(rangeStart, rangeEnd)
 	if err != nil {
@@ -385,13 +403,13 @@ func (operat *operation) threadTask(groupPool *WaitGroupPool, cherr chan error, 
 
 	// 使用代理 io 写入文件
 	_, err = io.Copy(buf, &ioProxyReader{reader: res.Body, send: func(n int) {
-		go atomic.AddInt64(operat.stat.CompletedLength, int64(n))
+		atomic.AddInt64(operat.stat.CompletedLength, int64(n))
 	}})
 	select {
 	case <-operat.ctx.Done():
 		// 如果被取消，将缓冲区的数据写入到文件
 		data := buf.Bytes()
-		tb.completedLength = uint32(len(data))
+		tb.completedLength = uint32(len(data) + int(completed))
 		f.WriteAt(data, rangeStart)
 		return
 	default:

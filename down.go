@@ -29,7 +29,7 @@ type Down struct {
 	AutoFileRenaming bool
 	// Continue 是否启用断点下载，默认为 true
 	Continue bool
-	// AutoSaveTnterval 自动保存控制文件的时间，默认为 20 秒
+	// AutoSaveTnterval 自动保存控制文件的时间，默认为 1 秒
 	AutoSaveTnterval time.Duration
 	// ConnectTimeout HTTP 连接请求的超时时间，默认为 5 秒
 	ConnectTimeout time.Duration
@@ -64,7 +64,7 @@ func New() *Down {
 		AllowOverwrite:   true,
 		Continue:         true,
 		AutoFileRenaming: true,
-		AutoSaveTnterval: time.Second * 20,
+		AutoSaveTnterval: time.Second * 1,
 		ConnectTimeout:   time.Second * 5,
 		Timeout:          time.Minute * 10,
 		RetryNumber:      5,
