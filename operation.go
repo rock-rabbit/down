@@ -264,7 +264,11 @@ func (operat *operation) autoSaveControlfile(f *os.File, cf *controlfile) {
 
 // saveControlfile 保存控制文件
 func (operat *operation) saveControlfile(f *os.File, cf *controlfile) {
-	cf.completedLength = uint64(atomic.LoadInt64(operat.stat.CompletedLength))
+	size := uint64(0)
+	for _, v := range cf.threadblock {
+		size += uint64(v.completedLength)
+	}
+	cf.completedLength = uint64(size)
 	f.Seek(0, 0)
 	io.Copy(f, cf.Encoding())
 }
@@ -397,14 +401,31 @@ func (operat *operation) threadTask(groupPool *WaitGroupPool, cherr chan error, 
 	}
 	defer res.Body.Close()
 
-	bufSize := (rangeEnd - rangeStart) + 1
+	bufSize := int((rangeEnd - rangeStart) + 1)
+	if bufSize > operat.down.DiskCache {
+		bufSize = operat.down.DiskCache
+	}
 
 	buf := bytes.NewBuffer(make([]byte, 0, bufSize))
 
 	// 使用代理 io 写入文件
 	_, err = io.Copy(buf, &ioProxyReader{reader: res.Body, send: func(n int) {
+		// 是否需要写入一些数据
+		if buf.Len()+n > bufSize {
+			data := buf.Bytes()
+			n, err := f.WriteAt(data, rangeStart)
+			if err != nil {
+				cherr <- err
+			}
+			f.Sync()
+			tb.completedLength = uint32(n + int(completed))
+			rangeStart += int64(n)
+			completed += int64(n)
+			buf.Reset()
+		}
 		atomic.AddInt64(operat.stat.CompletedLength, int64(n))
 	}})
+
 	select {
 	case <-operat.ctx.Done():
 		// 如果被取消，将缓冲区的数据写入到文件
@@ -426,7 +447,7 @@ func (operat *operation) threadTask(groupPool *WaitGroupPool, cherr chan error, 
 		cherr <- err
 		return
 	}
-	if int64(n) != bufSize {
+	if n != bufSize {
 		cherr <- fmt.Errorf("down error: bytes=%d-%d 写入数据为 %d 字节，与预计 %d 字节不符", rangeStart, rangeEnd, n, bufSize)
 		return
 	}

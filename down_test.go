@@ -10,7 +10,7 @@ import (
 
 func TestDown(t *testing.T) {
 	// 创建一个基本下载信息
-	meta := down.NewMeta("https://images.unsplash.com/photo-1661179738571-82e1815d83bb", "./tmp", "")
+	meta := down.NewMeta("https://dldir1.qq.com/qqfile/qq/PCQQ9.6.6/QQ9.6.6.28788.exe", "./tmp", "")
 	// 添加一个请求头
 	meta.Header.Set("referer", "https://im.qq.com/")
 	// down.Default 为默认配置的下载器, 你可以查看 Down 结构体配置自己的下载器
