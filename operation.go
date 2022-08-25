@@ -46,7 +46,11 @@ type operation struct {
 	cf *controlfile
 
 	// ctx 上下文
-	ctx context.Context
+	ctx      context.Context
+	ctxCance context.CancelFunc
+
+	// done 下载完成
+	done chan error
 
 	// stat 下载进行时的进度记录
 	stat *stating
@@ -169,6 +173,9 @@ func (operat *operation) init() error {
 			return fmt.Errorf("Make Hook: %s", err)
 		}
 	}
+
+	// 创建超时 context
+	operat.ctx, operat.ctxCance = context.WithTimeout(operat.ctx, operat.down.Timeout)
 	return nil
 }
 
@@ -210,21 +217,27 @@ func (operat *operation) baseInfo() error {
 	return nil
 }
 
+// start 开始执行下载
 func (operat *operation) start() error {
 	// 初始化操作
-	operat.init()
-	// 单线程下载逻辑
-	if !operat.multithread || operat.down.ThreadCount <= 1 {
-		if err := operat.singleThread(); err != nil {
-			return err
-		}
-		return nil
-	}
-	// 多线程下载逻辑
-	if err := operat.multithreading(); err != nil {
+	if err := operat.init(); err != nil {
 		return err
 	}
+
+	// 单线程下载逻辑
+	if !operat.multithread || operat.down.ThreadCount <= 1 {
+		go operat.singleThread()
+	}
+
+	// 多线程下载逻辑
+	go operat.multithreading()
+
 	return nil
+}
+
+// wait 等待下载完成
+func (operat *operation) wait() error {
+	return <-operat.done
 }
 
 // happenError 当出现错误时的处理方式
@@ -236,16 +249,14 @@ func (operat *operation) happenError(done <-chan int, f *os.File, cf *controlfil
 }
 
 // autoSaveControlfile 自动保存控制文件
-func (operat *operation) autoSaveControlfile(ctx context.Context, f *os.File, cf *controlfile) {
-Loop:
+func (operat *operation) autoSaveControlfile(f *os.File, cf *controlfile) {
 	for {
 		select {
-		case <-ctx.Done():
-			break Loop
-		default:
+		case <-time.After(operat.down.AutoSaveTnterval):
 			operat.saveControlfile(f, cf)
+		case <-operat.ctx.Done():
+			return
 		}
-		time.Sleep(operat.down.AutoSaveTnterval)
 	}
 }
 
@@ -256,80 +267,109 @@ func (operat *operation) saveControlfile(f *os.File, cf *controlfile) {
 	io.Copy(f, cf.Encoding())
 }
 
+// contextIsDone 判断 context 是否关闭
+func (operat *operation) contextIsDone() bool {
+	select {
+	case <-operat.ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
 // multithreading 多线程下载
-func (operat *operation) multithreading() error {
+func (operat *operation) multithreading() {
+	defer operat.ctxCance()
+
 	f, err := os.OpenFile(operat.outputPath, os.O_CREATE|os.O_RDWR, operat.meta.Perm)
 	if err != nil {
-		return fmt.Errorf("open file: %s", err)
+		operat.done <- fmt.Errorf("open file: %s", err)
+		return
 	}
 	defer f.Close()
-
-	if err := f.Truncate(operat.size); err != nil {
-		return err
+	// 非断点下载，设置文件大小
+	if operat.cf == nil {
+		if err := f.Truncate(operat.size); err != nil {
+			operat.done <- err
+			return
+		}
 	}
 	// 拆分任务
 	task := threadTaskSplit(operat.size, int64(operat.down.ThreadSize))
+
+	// 非断点下载，创建控制文件
+	var cf *controlfile
+	if operat.cf == nil {
+		cf = newControlfile(len(task))
+		cf.threadSize = uint32(operat.down.ThreadSize)
+		cf.totalLength = uint64(operat.size)
+	} else {
+		cf = operat.cf
+	}
+	cfIns, err := os.OpenFile(operat.controlfilePath, os.O_CREATE|os.O_RDWR, operat.meta.Perm)
+	if err != nil {
+		operat.done <- fmt.Errorf("open file: %s", err)
+		return
+	}
+	defer cfIns.Close()
+
 	// 任务执行
 	groupPool := NewWaitGroupPool(operat.down.ThreadCount)
 	done := make(chan int)
 	cherr := make(chan error)
-	// 创建控制文件
-	cf := newControlfile(len(task))
-	cf.threadSize = uint32(operat.down.ThreadSize)
-	cf.totalLength = uint64(operat.size)
-	controlfilePath := fmt.Sprintf("%s.%s", operat.outputPath, operat.down.TempFileExt)
-	controlfile, err := os.OpenFile(controlfilePath, os.O_CREATE|os.O_RDWR, operat.meta.Perm)
-	if err != nil {
-		return fmt.Errorf("open file: %s", err)
-	}
-	defer controlfile.Close()
-	// 超时上下文，控制超时时间
-	timeoutCtx, timeoutCancel := context.WithTimeout(operat.ctx, operat.down.Timeout)
-	defer timeoutCancel()
+
+	// 出现错误的措施
+	defer func() {
+		select {
+		case <-operat.ctx.Done():
+			operat.happenError(done, cfIns, cf)
+		case err = <-cherr:
+			operat.happenError(done, cfIns, cf)
+		default:
+		}
+	}()
+
 	// 自动保存控制文件
-	go operat.autoSaveControlfile(timeoutCtx, controlfile, cf)
+	go operat.autoSaveControlfile(cfIns, cf)
 	// 每秒给 Hook 发送信息
-	go operat.sendStat(timeoutCtx, groupPool)
+	go operat.sendStat(groupPool)
+
 	go func() {
-	Loop:
 		for idx, fileRange := range task {
 			groupPool.Add()
-			select {
-			case <-timeoutCtx.Done():
-				// 被取消掉了
+			// 被通知关闭了
+			if operat.contextIsDone() {
 				groupPool.Done()
-				break Loop
-			default:
+				break
 			}
-			go operat.threadTask(timeoutCtx, groupPool, cherr, f, cf.threadblock[idx], fileRange[0], fileRange[1])
+			go operat.threadTask(groupPool, cherr, f, cf.threadblock[idx], fileRange[0], fileRange[1])
 		}
 		groupPool.Wait()
 		done <- 1
 	}()
+
 	// 等待下载完成或失败
 	select {
 	case <-operat.ctx.Done():
-		operat.happenError(done, controlfile, cf)
-		return errors.New("context 关闭")
-	case <-timeoutCtx.Done():
-		operat.happenError(done, controlfile, cf)
-		return errors.New("超时")
+		operat.done <- errors.New("context 关闭")
+		return
 	case err = <-cherr:
-		operat.happenError(done, controlfile, cf)
-		return err
+		operat.done <- err
+		return
 	case <-done:
 		break
 	}
 	// 发送成功 Hook
 	operat.finishHook()
 	// 删除控制文件
-	controlfile.Close()
-	os.Remove(controlfilePath)
-	return nil
+	cfIns.Close()
+	os.Remove(operat.controlfilePath)
+	// 发送成功
+	operat.done <- nil
 }
 
 // threadTask 多线程下载中单个线程的下载逻辑
-func (operat *operation) threadTask(ctx context.Context, groupPool *WaitGroupPool, cherr chan error, f *os.File, tb *threadblock, rangeStart, rangeEnd int64) {
+func (operat *operation) threadTask(groupPool *WaitGroupPool, cherr chan error, f *os.File, tb *threadblock, rangeStart, rangeEnd int64) {
 	defer groupPool.Done()
 
 	res, err := operat.rangeDo(rangeStart, rangeEnd)
@@ -348,7 +388,7 @@ func (operat *operation) threadTask(ctx context.Context, groupPool *WaitGroupPoo
 		go atomic.AddInt64(operat.stat.CompletedLength, int64(n))
 	}})
 	select {
-	case <-ctx.Done():
+	case <-operat.ctx.Done():
 		// 如果被取消，将缓冲区的数据写入到文件
 		data := buf.Bytes()
 		tb.completedLength = uint32(len(data))
@@ -375,33 +415,38 @@ func (operat *operation) threadTask(ctx context.Context, groupPool *WaitGroupPoo
 }
 
 // singleThread 一个线程或者不支持多线程时的下载逻辑
-func (operat *operation) singleThread() error {
+func (operat *operation) singleThread() {
+	defer operat.ctxCance()
+
 	f, err := os.OpenFile(operat.outputPath, os.O_CREATE|os.O_RDWR, operat.meta.Perm)
 	if err != nil {
-		return fmt.Errorf("open file: %s", err)
+		operat.done <- fmt.Errorf("open file: %s", err)
+		return
 	}
 	defer f.Close()
-	if err := f.Truncate(operat.size); err != nil {
-		return err
+
+	if operat.cf == nil {
+		if err := f.Truncate(operat.size); err != nil {
+			operat.done <- err
+			return
+		}
 	}
 
 	res, err := operat.defaultDo(nil)
 	if err != nil {
-		return err
+		operat.done <- err
+		return
 	}
 	defer res.Body.Close()
 
-	// 超时上下文，控制超时时间
-	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), operat.down.Timeout)
-	defer timeoutCancel()
 	// 每秒给 Hook 发送信息
-	go operat.sendStat(timeoutCtx, nil)
+	go operat.sendStat(nil)
 	// 磁盘缓冲区
 	bufWriter := bufio.NewWriterSize(f, operat.down.DiskCache)
 	// 使用代理 io 写入文件
 	_, err = io.Copy(bufWriter, &ioProxyReader{reader: res.Body, send: func(n int) {
 		select {
-		case <-timeoutCtx.Done():
+		case <-operat.ctx.Done():
 			res.Body.Close()
 		default:
 			atomic.AddInt64(operat.stat.CompletedLength, int64(n))
@@ -412,16 +457,16 @@ func (operat *operation) singleThread() error {
 	// 判断是否有错误
 	select {
 	case <-operat.ctx.Done():
-		return fmt.Errorf("context 关闭")
-	case <-timeoutCtx.Done():
-		return fmt.Errorf("超时")
+		operat.done <- fmt.Errorf("context 关闭")
 	default:
 		if err != nil {
-			return fmt.Errorf("io.Copy: %s", err)
+			operat.done <- err
+			return
 		}
 		operat.finishHook()
 	}
-	return nil
+
+	operat.done <- nil
 }
 
 // copyHooks 拷贝 Hook ，防止使用 Hook 中途发生变化
@@ -462,14 +507,11 @@ func (operat *operation) sendHook(stat *Stat) error {
 }
 
 // sendStat 下载资源途中对数据的处理和发送 Hook
-func (operat *operation) sendStat(ctx context.Context, groupPool *WaitGroupPool) {
+func (operat *operation) sendStat(groupPool *WaitGroupPool) {
 	oldCompletedLength := atomic.LoadInt64(operat.stat.CompletedLength)
-Loop:
 	for {
 		select {
-		case <-ctx.Done():
-			break Loop
-		default:
+		case <-time.After(time.Second):
 			connections := 1
 			if groupPool != nil {
 				connections = groupPool.Count()
@@ -487,7 +529,8 @@ Loop:
 				OutputPath:      operat.outputPath,
 			}
 			operat.sendHook(stat)
+		case <-operat.ctx.Done():
+			return
 		}
-		time.Sleep(time.Second)
 	}
 }

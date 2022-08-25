@@ -92,34 +92,66 @@ func (down *Down) AddHook(perhook PerHook) {
 	down.PerHooks = append(down.PerHooks, perhook)
 }
 
-// Run 执行下载
+// Run 执行下载，阻塞等待完成
 func (down *Down) Run(meta *Meta) error {
 	return down.RunContext(context.Background(), meta)
 }
 
-// RunContext 基于 context 执行下载
+// RunContext 基于 context 执行下载，阻塞等待完成
 func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
-	ins := down.operation(ctx, meta)
-	// 运行 operation
-	if err := ins.start(); err != nil {
-		return fmt.Errorf("down error: %s", err)
+	var (
+		err    error
+		operat *Operation
+	)
+	operat, err = down.StartContext(ctx, meta)
+	if err != nil {
+		return err
+	}
+	err = operat.Wait()
+	if err != nil {
+		return err
 	}
 	return nil
 }
 
+// Start 非阻塞运行
+func (down *Down) Start(meta *Meta) (*Operation, error) {
+	return down.StartContext(context.Background(), meta)
+}
+
+// StartContext 基于 context 非阻塞运行
+func (down *Down) StartContext(ctx context.Context, meta *Meta) (*Operation, error) {
+	operat := down.operation(ctx, meta)
+	if err := operat.start(); err != nil {
+		return nil, fmt.Errorf("down error: %s", err)
+	}
+	return &Operation{operat: operat}, nil
+}
+
+// Operation 包装 operation
+type Operation struct {
+	operat *operation
+}
+
+// Wait 阻塞等待完成
+func (o *Operation) Wait() error {
+	return o.operat.wait()
+}
+
 // operation 创建 operation
 func (down *Down) operation(ctx context.Context, meta *Meta) *operation {
-	var ins *operation
+	var operat *operation
 	// 组合操作结构,将配置拷贝一份
 	down.mux.Lock()
-	ins = &operation{
+	operat = &operation{
 		down: down.copy(),
 		meta: meta.copy(),
 		stat: &stating{
 			CompletedLength: new(int64),
 		},
-		ctx: ctx,
+		ctx:  ctx,
+		done: make(chan error),
 	}
 	down.mux.Unlock()
-	return ins
+	return operat
 }
