@@ -59,37 +59,53 @@ func main(){
 	}
 }
 ```
-## 控制文件
 
+## 🔗 目录结构
+```
+.
+├── LICENSE			开源协议 MIT
+├── Makefile		快捷命令
+├── README.md		说明文件
+├── bar_hook.go		控制台进度条 Hook
+├── controlfile.go	控制文件
+├── down.go			下载器配置
+├── go.mod
+├── hook.go			定义 Hook 接口
+├── meta.go			基本下载信息
+├── mime.go			识别文件头
+├── operation.go	具体的下载实现
+├── pool.go			线程池
+├── rate.go			限流器
+├── request.go		网络请求
+└── utils.go		一些工具
+```
+
+## 📄 控制文件
+``` markdown
 控制文件使用 big endian 字节顺序
 
 `Varsion` 2 字节
-
 版本，当前版本只有 0（0x0000）
 
 `TotalLength` 8 字节
-
 文件总长度
 
 `CompletedLength` 8 字节
-
 已下载大小
 
 `ThreadSize` 4 字节
-
 每个线程下载的大小
 
 `ThreadNum` 4 字节
-
 未完成的的线程块数量
 
 
 以下为重复 ThreadNum 次的数据 ThreadBlock
 
 `CompletedLength` 4 字节
-
 已下载大小
 
+```
 
 
 
