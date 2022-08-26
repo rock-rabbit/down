@@ -10,4 +10,4 @@ test:
  # TestDown 测试下载
  .PHONY: TestDown
  TestDown:
-	$(GO) test -run ^TestDown$ -v -count=1
+	$(GO) test -run ^TestDown$$ -v -count=1

@@ -59,6 +59,11 @@ func newOperatCF() *operatCF {
 	}
 }
 
+// newControlfile 创建控制文件
+func (ocf *operatCF) newControlfile() {
+	ocf.cf = newControlfile(0)
+}
+
 // addTB 添加数据块
 func (ocf *operatCF) addTB(total, completed int32, start, end int64) {
 	ocf.mux.Lock()

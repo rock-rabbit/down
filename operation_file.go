@@ -30,12 +30,11 @@ func newOperatFile(ctx context.Context, path string, perm fs.FileMode, bufsize i
 	return &operatFile{ctx: ctx, file: f, bufsize: bufsize}, nil
 }
 
-func (ofat *operatFileAt) Write(p []byte) (n int, err error) {
-	n = len(p)
-
-	atomic.AddInt64(ofat.of.cl, int64(n))
-
-	return
+// close 关闭文件
+func (of *operatFile) close() {
+	if of.file != nil {
+		of.close()
+	}
 }
 
 // makeFileAt 创建文件位置的操作文件
@@ -43,8 +42,11 @@ func (of *operatFile) makeFileAt(start int64) *operatFileAt {
 	return &operatFileAt{of: of, start: start}
 }
 
-func (of *operatFile) close() {
-	if of.file != nil {
-		of.close()
-	}
+// Write 写入
+func (ofat *operatFileAt) Write(p []byte) (n int, err error) {
+	n, err = ofat.of.file.Write(p)
+
+	// 新增下载进度
+	atomic.AddInt64(ofat.of.cl, int64(n))
+	return
 }

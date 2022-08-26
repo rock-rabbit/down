@@ -114,14 +114,13 @@ func (operat *operation) elected() {
 
 // finish 下载完成
 func (operat *operation) finish(err error) {
-	operat.err = err
-	operat.done <- err
 	if err == nil {
 		// 发送成功 Hook
 		operat.finishHook()
 		// 删除控制文件
 		operat.operatCF.remove()
 	}
+	operat.done <- err
 }
 
 // wait 等待下载完成

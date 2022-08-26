@@ -57,6 +57,7 @@ func (operat *operation) init() error {
 	if err != nil {
 		return err
 	}
+	operat.operatFile.cl = operat.stat.CompletedLength
 
 	return nil
 }
@@ -104,16 +105,16 @@ func (operat *operation) checkFile() error {
 		// 控制文件损坏，不能使用断点续传
 	}
 
+	operat.operatCF.newControlfile()
+
 	if outputPathExist && operat.down.AllowOverwrite {
 		// 允许删除文件重新下载
 		err = os.Remove(operat.outputPath)
 		if err != nil {
 			return err
 		}
-		err = os.Remove(operat.controlfilePath)
-		if err != nil {
-			return err
-		}
+		// 删除控制文件
+		os.Remove(operat.controlfilePath)
 	} else if outputPathExist {
 		return fmt.Errorf(ErrorFileExist, operat.outputPath)
 	}

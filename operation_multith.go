@@ -1,6 +1,7 @@
 package down
 
 import (
+	"bufio"
 	"io"
 )
 
@@ -57,11 +58,15 @@ func (operat *operation) multithSingle(id int, groupPool *WaitGroupPool, rangeSt
 	}
 	defer res.Body.Close()
 
-	buf := operat.operatFile.makeFileAt(rangeStart)
-
+	buf := bufio.NewWriterSize(operat.operatFile.makeFileAt(rangeStart), operat.operatFile.bufsize)
 	// 写入到文件
 	_, err = io.Copy(buf, res.Body)
 	if err != nil {
+		groupPool.Error(err)
+		return
+	}
+
+	if err := buf.Flush(); err != nil {
 		groupPool.Error(err)
 	}
 }

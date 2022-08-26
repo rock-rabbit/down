@@ -37,6 +37,7 @@ var mimeType = map[string]string{
 	"504b0304": "zip",
 	"52617221": "rar",
 	/* 其他类型 */
+	"4d5a90":                       "exe",
 	"7b5c727466":                   "rtf",
 	"3c3f786d6c":                   "xml",
 	"68746d6c3e":                   "html",
