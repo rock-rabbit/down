@@ -7,3 +7,7 @@ test:
 	$(GO) tool cover -html=./cover.out -o ./coverage.html
 	open ./coverage.html
  
+ # TestDown 测试下载
+ .PHONY: TestDown
+ TestDown:
+	$(GO) test -run ^TestDown$ -v -count=1

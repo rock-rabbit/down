@@ -7,6 +7,7 @@ import (
 
 // WaitGroupPool sync.WaitGroup 池
 type WaitGroupPool struct {
+	done chan error
 	pool chan struct{}
 	wg   *sync.WaitGroup
 }
@@ -17,6 +18,7 @@ func NewWaitGroupPool(size int) *WaitGroupPool {
 		size = math.MaxInt32
 	}
 	return &WaitGroupPool{
+		done: make(chan error, size),
 		pool: make(chan struct{}, size),
 		wg:   &sync.WaitGroup{},
 	}
@@ -42,4 +44,22 @@ func (p *WaitGroupPool) Done() {
 // Wait 阻塞等待 sync.WaitGroup 清零
 func (p *WaitGroupPool) Wait() {
 	p.wg.Wait()
+}
+
+// Syne 非阻塞等待
+func (p *WaitGroupPool) Syne() {
+	go func() {
+		p.wg.Wait()
+		p.done <- nil
+	}()
+}
+
+// Error 出现错误
+func (p *WaitGroupPool) Error(err error) {
+	p.done <- err
+}
+
+// SyneDone 非阻塞等待时全部完成
+func (p *WaitGroupPool) AllDone() <-chan error {
+	return p.done
 }
