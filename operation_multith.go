@@ -3,6 +3,7 @@ package down
 import (
 	"bufio"
 	"io"
+	"sync/atomic"
 )
 
 // multith 多线程下载
@@ -58,9 +59,11 @@ func (operat *operation) multithSingle(id int, groupPool *WaitGroupPool, rangeSt
 	}
 	defer res.Body.Close()
 
-	buf := bufio.NewWriterSize(operat.operatFile.makeFileAt(rangeStart), operat.operatFile.bufsize)
+	buf := bufio.NewWriterSize(operat.operatFile.makeFileAt(id, rangeStart), operat.operatFile.bufsize)
 	// 写入到文件
-	_, err = io.Copy(buf, res.Body)
+	_, err = io.Copy(buf, &ioProxyReader{reader: res.Body, send: func(n int) {
+		atomic.AddInt64(operat.stat.CompletedLength, int64(n))
+	}})
 	if err != nil {
 		groupPool.Error(err)
 		return

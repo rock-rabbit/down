@@ -58,6 +58,7 @@ func (operat *operation) init() error {
 		return err
 	}
 	operat.operatFile.cl = operat.stat.CompletedLength
+	operat.operatFile.operatCF = operat.operatCF
 
 	return nil
 }
@@ -88,12 +89,12 @@ func (operat *operation) checkFile() error {
 	}
 
 	operat.operatCF = newOperatCF()
+	err = operat.operatCF.open(operat.controlfilePath, operat.meta.Perm)
+	if err != nil {
+		return err
+	}
 	if outputPathExist && operat.down.Continue && fileExist(operat.controlfilePath) {
 		// 可以使用断点下载 并且 存在控制文件
-		err = operat.operatCF.open(operat.controlfilePath, operat.meta.Perm)
-		if err != nil {
-			return err
-		}
 		err = operat.operatCF.read()
 		if err != nil {
 			return err

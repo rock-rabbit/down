@@ -85,7 +85,7 @@ func (ocf *operatCF) setTB(key int, completed int32) {
 	ocf.change = true
 }
 
-// autoSave 自动保存控制文件
+// autoSave 自动保存控制文件 TODO: ctx
 func (ocf *operatCF) autoSave(d time.Duration) {
 	for {
 		if ocf.change {
@@ -102,6 +102,7 @@ func (ocf *operatCF) autoSave(d time.Duration) {
 func (ocf *operatCF) save() {
 	ocf.file.Seek(0, 0)
 	io.Copy(ocf.file, ocf.cf.Encoding())
+	ocf.file.Sync()
 }
 
 // getCF 获取控制文件
