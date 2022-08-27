@@ -17,6 +17,14 @@ import (
 func (operat *operation) init() error {
 	var err error
 
+	// 创建上下文
+	if operat.down.Timeout <= 0 {
+		operat.ctx, operat.ctxCance = context.WithCancel(operat.ctx)
+	} else {
+		// 创建超时 context
+		operat.ctx, operat.ctxCance = context.WithTimeout(operat.ctx, operat.down.Timeout)
+	}
+
 	// 应用配置
 	operat.useconfig()
 
@@ -38,18 +46,19 @@ func (operat *operation) init() error {
 		return err
 	}
 
+	// 检查到不需要断点续传，新建控制文件
+	if !operat.breakpoint {
+		err = operat.operatCF.open(operat.controlfilePath, operat.meta.Perm)
+		if err != nil {
+			return err
+		}
+		operat.operatCF.newControlfile()
+	}
+
 	// 创建 Hook
 	err = operat.makeHook()
 	if err != nil {
 		return err
-	}
-
-	// 创建上下文
-	if operat.down.Timeout <= 0 {
-		operat.ctx, operat.ctxCance = context.WithCancel(operat.ctx)
-	} else {
-		// 创建超时 context
-		operat.ctx, operat.ctxCance = context.WithTimeout(operat.ctx, operat.down.Timeout)
 	}
 
 	// 创建操作文件
@@ -82,19 +91,20 @@ func (operat *operation) checkFile() error {
 	var err error
 	// 文件是否存在, 这里之后支持断点续传后需要改逻辑
 	outputPathExist := fileExist(operat.outputPath)
+	controlfileExist := fileExist(operat.controlfilePath)
 
 	// 目录不存在时创建目录
 	if operat.down.CreateDir && !fileExist(operat.meta.OutputDir) {
 		os.MkdirAll(operat.meta.OutputDir, os.ModePerm)
 	}
 
-	operat.operatCF = newOperatCF()
-	err = operat.operatCF.open(operat.controlfilePath, operat.meta.Perm)
-	if err != nil {
-		return err
-	}
-	if outputPathExist && operat.down.Continue && fileExist(operat.controlfilePath) {
+	operat.operatCF = newOperatCF(operat.ctx)
+	if outputPathExist && operat.down.Continue && controlfileExist {
 		// 可以使用断点下载 并且 存在控制文件
+		err = operat.operatCF.open(operat.controlfilePath, operat.meta.Perm)
+		if err != nil {
+			return err
+		}
 		err = operat.operatCF.read()
 		if err != nil {
 			return err
@@ -104,9 +114,13 @@ func (operat *operation) checkFile() error {
 			return nil
 		}
 		// 控制文件损坏，不能使用断点续传
+		operat.operatCF.close()
+		// 删除控制文件
+		err = os.Remove(operat.controlfilePath)
+		if err != nil {
+			return err
+		}
 	}
-
-	operat.operatCF.newControlfile()
 
 	if outputPathExist && operat.down.AllowOverwrite {
 		// 允许删除文件重新下载
@@ -114,8 +128,6 @@ func (operat *operation) checkFile() error {
 		if err != nil {
 			return err
 		}
-		// 删除控制文件
-		os.Remove(operat.controlfilePath)
 	} else if outputPathExist {
 		return fmt.Errorf(ErrorFileExist, operat.outputPath)
 	}

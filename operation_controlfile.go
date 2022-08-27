@@ -2,6 +2,7 @@ package down
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
 	"io/fs"
@@ -12,9 +13,9 @@ import (
 
 const (
 	// CONTROLFILESIZE 控制文件最小长度
-	CONTROLFILESIZE = 14
+	CONTROLFILESIZE = 34
 	// THREADBLOCKSIZE 一个线程块的长度
-	THREADBLOCKSIZE = 4
+	THREADBLOCKSIZE = 24
 	// CONTROLFILEHEAD 控制文件头 100 111 119 110
 	CONTROLFILEHEAD = "down"
 )
@@ -45,6 +46,7 @@ type threadblock struct {
 
 // operatCF 操作控制文件
 type operatCF struct {
+	ctx    context.Context
 	path   string
 	file   *os.File
 	cf     *controlfile
@@ -53,8 +55,9 @@ type operatCF struct {
 }
 
 // newOperatCF 新建操控控制文件
-func newOperatCF() *operatCF {
+func newOperatCF(ctx context.Context) *operatCF {
 	return &operatCF{
+		ctx: ctx,
 		mux: sync.Mutex{},
 	}
 }
@@ -85,16 +88,20 @@ func (ocf *operatCF) setTB(key int, completed int32) {
 	ocf.change = true
 }
 
-// autoSave 自动保存控制文件 TODO: ctx
+// autoSave 自动保存控制文件
 func (ocf *operatCF) autoSave(d time.Duration) {
 	for {
-		if ocf.change {
-			ocf.mux.Lock()
-			ocf.save()
-			ocf.change = false
-			ocf.mux.Unlock()
+		select {
+		case <-time.After(d):
+			if ocf.change {
+				ocf.mux.Lock()
+				ocf.save()
+				ocf.change = false
+				ocf.mux.Unlock()
+			}
+		case <-ocf.ctx.Done():
+			return
 		}
-		time.Sleep(d)
 	}
 }
 
@@ -163,9 +170,9 @@ func (cf *controlfile) CompletedLength() int64 {
 
 // Encoding 编码输出二进制
 func (cf *controlfile) Encoding() *bytes.Buffer {
-	buf := bytes.NewBuffer(make([]byte, 0, len(cf.threadblock)*8+CONTROLFILESIZE))
+	buf := bytes.NewBuffer(make([]byte, 0, len(cf.threadblock)*THREADBLOCKSIZE+CONTROLFILESIZE))
 	binaryWrite := binaryWriteFunc(buf, binary.BigEndian)
-	binaryWrite(CONTROLFILEHEAD)
+	binaryWrite([]byte(CONTROLFILEHEAD))
 	binaryWrite(cf.varsion)
 	binaryWrite(cf.total)
 	for _, v := range cf.threadblock {

@@ -46,11 +46,12 @@ func (of *operatFile) makeFileAt(id int, start int64) *operatFileAt {
 
 // Write 写入
 func (ofat *operatFileAt) Write(p []byte) (n int, err error) {
-	n, err = ofat.of.file.Write(p)
+	n, err = ofat.of.file.WriteAt(p, ofat.start)
 	if err != nil {
 		return n, err
 	}
 	err = ofat.of.file.Sync()
+	ofat.start += int64(n)
 	ofat.completed += int32(n)
 	// 更新操作文件
 	ofat.of.operatCF.setTB(ofat.id, int32(ofat.completed))

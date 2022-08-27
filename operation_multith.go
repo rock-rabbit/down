@@ -59,7 +59,13 @@ func (operat *operation) multithSingle(id int, groupPool *WaitGroupPool, rangeSt
 	}
 	defer res.Body.Close()
 
-	buf := bufio.NewWriterSize(operat.operatFile.makeFileAt(id, rangeStart), operat.operatFile.bufsize)
+	size := int(rangeEnd - rangeStart + 1)
+	bufSize := operat.operatFile.bufsize
+	if bufSize > size {
+		bufSize = size
+	}
+
+	buf := bufio.NewWriterSize(operat.operatFile.makeFileAt(id, rangeStart), bufSize)
 	// 写入到文件
 	_, err = io.Copy(buf, &ioProxyReader{reader: res.Body, send: func(n int) {
 		atomic.AddInt64(operat.stat.CompletedLength, int64(n))
