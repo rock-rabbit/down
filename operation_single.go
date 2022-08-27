@@ -63,5 +63,5 @@ func (operat *operation) single() {
 
 // singleBreakpoint 单线程，断点续传
 func (operat *operation) singleBreakpoint() {
-
+	operat.finish(operat.err)
 }

@@ -82,5 +82,5 @@ func (operat *operation) multithSingle(id int, groupPool *WaitGroupPool, rangeSt
 
 // multithBreakpoint 多线程，断点续传
 func (operat *operation) multithBreakpoint() {
-
+	operat.finish(operat.err)
 }

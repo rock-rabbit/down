@@ -207,14 +207,14 @@ func newControlfile(size int) *controlfile {
 func ParseControlfile(data []byte) *controlfile {
 	dataLen := len(data)
 	// 检查是否符合规范
-	if dataLen < CONTROLFILESIZE || string(data[:5]) != CONTROLFILEHEAD || (dataLen-CONTROLFILESIZE)%THREADBLOCKSIZE != 0 {
+	if dataLen < CONTROLFILESIZE || string(data[:4]) != CONTROLFILEHEAD || (dataLen-14)%THREADBLOCKSIZE != 0 {
 		return nil
 	}
-	cf := newControlfile((dataLen - CONTROLFILESIZE) / THREADBLOCKSIZE)
+	cf := newControlfile((dataLen - 14) / THREADBLOCKSIZE)
 	binary.Read(bytes.NewReader(data[4:6]), binary.BigEndian, &cf.varsion)
 	binary.Read(bytes.NewReader(data[6:14]), binary.BigEndian, &cf.total)
 	b := 0
-	for i := CONTROLFILESIZE; i < dataLen-CONTROLFILESIZE; i += THREADBLOCKSIZE {
+	for i := 14; i < dataLen-14; i += THREADBLOCKSIZE {
 		binary.Read(bytes.NewReader(data[i:i+4]), binary.BigEndian, &cf.threadblock[b].total)
 		binary.Read(bytes.NewReader(data[i:i+8]), binary.BigEndian, &cf.threadblock[b].completed)
 		binary.Read(bytes.NewReader(data[i:i+16]), binary.BigEndian, &cf.threadblock[b].start)
