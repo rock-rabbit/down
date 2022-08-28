@@ -207,6 +207,31 @@ func TestThreadTaskSplit(t *testing.T) {
 	}
 }
 
+func TestThreadTaskSplitBreakpoint(t *testing.T) {
+	testData := []struct {
+		start, size, threadSize int64
+		out                     [][2]int64
+	}{
+		{0, 0, 0, [][2]int64{}},
+		{1000, 2048, 1024, [][2]int64{{1000, 2023}, {2024, 2047}}},
+		{1000, 2049, 1024, [][2]int64{{1000, 2023}, {2024, 2048}}},
+		{1000, 2047, 1024, [][2]int64{{1000, 2023}, {2024, 2046}}},
+		{1000, 0, 1024, [][2]int64{}},
+	}
+
+	for _, v := range testData {
+		tmp := threadTaskSplitBreakpoint(v.start, v.size, v.threadSize)
+		if len(tmp) != len(v.out) {
+			t.Fatalf("size:%d threadSize:%d 任务分割失败, 长度不一致，输出 %v, 应输出 %v", v.size, v.threadSize, tmp, v.out)
+		}
+		for idx, vv := range tmp {
+			if vv != v.out[idx] {
+				t.Fatalf("size:%d threadSize:%d 任务分割失败, 输出 %v, 应输出 %v", v.size, v.threadSize, tmp, v.out)
+			}
+		}
+	}
+}
+
 func TestGetFileName(t *testing.T) {
 	testData := []struct {
 		uri                string
