@@ -34,7 +34,7 @@ func newOperatFile(ctx context.Context, path string, perm fs.FileMode, bufsize i
 // close 关闭文件
 func (of *operatFile) close() {
 	if of.file != nil {
-		of.close()
+		of.file.Close()
 	}
 }
 

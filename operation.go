@@ -89,11 +89,6 @@ func (operat *operation) start() error {
 
 // elected 下载方式判断
 func (operat *operation) elected() {
-	// 释放资源
-	defer operat.ctxCance()
-	defer operat.operatCF.close()
-	defer operat.operatFile.close()
-
 	// 单线程下载逻辑
 	if !operat.multithread || operat.down.ThreadCount <= 1 {
 		if operat.breakpoint {
@@ -114,6 +109,10 @@ func (operat *operation) elected() {
 
 // finish 下载完成
 func (operat *operation) finish(err error) {
+	// 释放资源
+	operat.ctxCance()
+	operat.operatCF.close()
+	operat.operatFile.close()
 	if err == nil {
 		// 发送成功 Hook
 		operat.finishHook()

@@ -13,7 +13,7 @@ func (operat *operation) multith() {
 		operat.finish(err)
 		return
 	}
-	task := threadTaskSplit(operat.size, int64(operat.down.ThreadSize))
+	task := threadTaskSplit(0, operat.size, int64(operat.down.ThreadSize))
 	// 任务执行
 	groupPool := NewWaitGroupPool(operat.down.ThreadCount)
 	// 自动保存控制文件
@@ -119,7 +119,7 @@ func (operat *operation) startMultithBreakpoint(groupPool *WaitGroupPool) {
 	// 未分配的任务块
 	threadblocklen := len(operat.operatCF.getCF().threadblock)
 	startsize := operat.operatCF.getCF().threadblock[threadblocklen-1].end + 1
-	for idx, task := range threadTaskSplitBreakpoint(startsize, operat.size, int64(operat.down.ThreadSize)) {
+	for idx, task := range threadTaskSplit(startsize, operat.size, int64(operat.down.ThreadSize)) {
 		groupPool.Add()
 		// 中途关闭
 		if operat.contextIsDone() {
