@@ -13,6 +13,8 @@ import (
 type Down struct {
 	// PerHooks 是返回下载进度的钩子，默认为空
 	PerHooks []PerHook
+	// SendTime 给 Hook 发送下载进度的间隔时间，默认为 500ms
+	SendTime time.Duration
 	// ThreadCount 多线程下载时最多同时下载一个文件的最大线程，默认为 1
 	ThreadCount int
 	// ThreadSize 多线程下载时每个线程下载的大小，每个线程都会有一个自己下载大小的缓冲区，默认为 20M
@@ -56,6 +58,7 @@ var (
 func New() *Down {
 	return &Down{
 		PerHooks:         make([]PerHook, 0),
+		SendTime:         time.Millisecond * 500,
 		ThreadCount:      1,
 		ThreadSize:       20971520,
 		DiskCache:        16777216,

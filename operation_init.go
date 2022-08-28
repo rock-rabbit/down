@@ -108,7 +108,7 @@ func (operat *operation) checkFile() error {
 		if err != nil {
 			return err
 		}
-		if operat.operatCF.getCF() != nil {
+		if operat.operatCF.getCF() != nil && operat.checkControlfile() {
 			operat.breakpoint = true
 			return nil
 		}
@@ -132,6 +132,11 @@ func (operat *operation) checkFile() error {
 	}
 
 	return nil
+}
+
+// checkControlfile 检查控制文件
+func (operat *operation) checkControlfile() bool {
+	return operat.operatCF.getCF().total == operat.size
 }
 
 // usefilepath 应用文件路径
@@ -163,6 +168,8 @@ func (operat *operation) useconfig() {
 			TLSHandshakeTimeout: 10 * time.Second,
 			// 接受服务器提供的任何证书
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			// 尝试使用 HTTP2
+			ForceAttemptHTTP2: true,
 		},
 		// 超时时间
 		Timeout: 0,

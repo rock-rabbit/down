@@ -178,15 +178,21 @@ func (operat *operation) sendHook(stat *Stat) error {
 // sendStat 下载资源途中对数据的处理和发送 Hook
 func (operat *operation) sendStat(groupPool *WaitGroupPool) {
 	oldCompletedLength := atomic.LoadInt64(operat.stat.CompletedLength)
+	ratio := float64(time.Second) / float64(operat.down.SendTime)
 	for {
 		select {
-		case <-time.After(time.Second):
+		case <-time.After(operat.down.SendTime):
 			connections := 1
 			if groupPool != nil {
 				connections = groupPool.Count()
 			}
 			completedLength := atomic.LoadInt64(operat.stat.CompletedLength)
-			downloadSpeed := completedLength - oldCompletedLength
+			// 下载速度
+			differ := completedLength - oldCompletedLength
+			downloadSpeed := differ
+			if operat.down.SendTime < time.Second || operat.down.SendTime > time.Second {
+				downloadSpeed = int64(float64(completedLength-oldCompletedLength) * ratio)
+			}
 			oldCompletedLength = completedLength
 			stat := &Stat{
 				Meta:            operat.meta,
