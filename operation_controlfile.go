@@ -212,8 +212,8 @@ func ParseControlfile(data []byte) *controlfile {
 	b := 0
 	for i := 14; i < dataLen-14; i += THREADBLOCKSIZE {
 		binary.Read(bytes.NewReader(data[i:i+8]), binary.BigEndian, &cf.threadblock[b].completed)
-		binary.Read(bytes.NewReader(data[i:i+16]), binary.BigEndian, &cf.threadblock[b].start)
-		binary.Read(bytes.NewReader(data[i:i+24]), binary.BigEndian, &cf.threadblock[b].end)
+		binary.Read(bytes.NewReader(data[i+8:i+16]), binary.BigEndian, &cf.threadblock[b].start)
+		binary.Read(bytes.NewReader(data[i+16:i+24]), binary.BigEndian, &cf.threadblock[b].end)
 		b++
 	}
 	return cf

@@ -65,7 +65,7 @@ func (operat *operation) multithSingle(id int, groupPool *WaitGroupPool, rangeSt
 		bufSize = size
 	}
 	// 新建硬盘缓冲区写入
-	buf := bufio.NewWriterSize(operat.operatFile.makeFileAt(id, rangeStart), bufSize)
+	buf := bufio.NewWriterSize(operat.operatFile.makeFileAt(id, rangeStart, 0), bufSize)
 	_, err = io.Copy(buf, &ioProxyReader{reader: res.Body, send: func(n int) {
 		atomic.AddInt64(operat.stat.CompletedLength, int64(n))
 	}})

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -53,6 +54,7 @@ func (operat *operation) init() error {
 			return err
 		}
 		operat.operatCF.newControlfile()
+		operat.operatCF.getCF().total = operat.size
 	}
 
 	// 创建 Hook
@@ -98,7 +100,7 @@ func (operat *operation) checkFile() error {
 	}
 
 	operat.operatCF = newOperatCF(operat.ctx)
-	if outputPathExist && operat.down.Continue && controlfileExist {
+	if operat.multithread && outputPathExist && operat.down.Continue && controlfileExist {
 		// 可以使用断点下载 并且 存在控制文件
 		err = operat.operatCF.open(operat.controlfilePath, operat.meta.Perm)
 		if err != nil {
@@ -109,6 +111,7 @@ func (operat *operation) checkFile() error {
 			return err
 		}
 		if operat.operatCF.getCF() != nil && operat.checkControlfile() {
+			atomic.SwapInt64(operat.stat.CompletedLength, operat.operatCF.getCF().CompletedLength())
 			operat.breakpoint = true
 			return nil
 		}

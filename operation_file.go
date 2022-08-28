@@ -39,8 +39,8 @@ func (of *operatFile) close() {
 }
 
 // makeFileAt 创建文件位置的操作文件
-func (of *operatFile) makeFileAt(id int, start int64) *operatFileAt {
-	return &operatFileAt{id: id, of: of, start: start}
+func (of *operatFile) makeFileAt(id int, start int64, completed int64) *operatFileAt {
+	return &operatFileAt{id: id, of: of, start: start, completed: completed}
 }
 
 // Write 写入
@@ -52,6 +52,7 @@ func (ofat *operatFileAt) Write(p []byte) (n int, err error) {
 	err = ofat.of.file.Sync()
 	ofat.start += int64(n)
 	ofat.completed += int64(n)
+
 	// 更新操作文件
 	ofat.of.operatCF.setTB(ofat.id, ofat.completed)
 	return
