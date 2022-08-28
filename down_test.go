@@ -16,7 +16,7 @@ func TestDown(t *testing.T) {
 	// down.Default 为默认配置的下载器, 你可以查看 Down 结构体配置自己的下载器
 	down.Default.AddHook(down.DefaultBarHook)
 	down.Default.ThreadSize = 1024 << 10
-	down.Default.ThreadCount = 2
+	down.Default.ThreadCount = 1
 	down.Default.Timeout = time.Second * 50
 	// 执行下载, 你也可以使用 RunContext 传递一个 Context
 	err := down.Default.Run(meta)

@@ -34,10 +34,8 @@ type controlfile struct {
 
 // threadblock 未完成的线程信息
 type threadblock struct {
-	// total 4 字节 总长度
-	total int32
-	// completed 4 字节 已下载大小
-	completed int32
+	// completed 8 字节 已下载大小
+	completed int64
 	// start 8 字节 开始字节
 	start int64
 	// end 8 字节 结束字节
@@ -68,11 +66,10 @@ func (ocf *operatCF) newControlfile() {
 }
 
 // addTB 添加数据块
-func (ocf *operatCF) addTB(total, completed int32, start, end int64) {
+func (ocf *operatCF) addTB(completed, start, end int64) {
 	ocf.mux.Lock()
 	defer ocf.mux.Unlock()
 	ocf.cf.threadblock = append(ocf.cf.threadblock, &threadblock{
-		total:     total,
 		completed: completed,
 		start:     start,
 		end:       end,
@@ -81,7 +78,7 @@ func (ocf *operatCF) addTB(total, completed int32, start, end int64) {
 }
 
 // setTB 设置数据块
-func (ocf *operatCF) setTB(key int, completed int32) {
+func (ocf *operatCF) setTB(key int, completed int64) {
 	ocf.mux.Lock()
 	defer ocf.mux.Unlock()
 	ocf.cf.threadblock[key].completed = completed
@@ -176,7 +173,6 @@ func (cf *controlfile) Encoding() *bytes.Buffer {
 	binaryWrite(cf.varsion)
 	binaryWrite(cf.total)
 	for _, v := range cf.threadblock {
-		binaryWrite(v.total)
 		binaryWrite(v.completed)
 		binaryWrite(v.start)
 		binaryWrite(v.end)
@@ -215,7 +211,6 @@ func ParseControlfile(data []byte) *controlfile {
 	binary.Read(bytes.NewReader(data[6:14]), binary.BigEndian, &cf.total)
 	b := 0
 	for i := 14; i < dataLen-14; i += THREADBLOCKSIZE {
-		binary.Read(bytes.NewReader(data[i:i+4]), binary.BigEndian, &cf.threadblock[b].total)
 		binary.Read(bytes.NewReader(data[i:i+8]), binary.BigEndian, &cf.threadblock[b].completed)
 		binary.Read(bytes.NewReader(data[i:i+16]), binary.BigEndian, &cf.threadblock[b].start)
 		binary.Read(bytes.NewReader(data[i:i+24]), binary.BigEndian, &cf.threadblock[b].end)

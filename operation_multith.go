@@ -9,7 +9,8 @@ import (
 // multith 多线程下载
 func (operat *operation) multith() {
 	if err := operat.operatFile.file.Truncate(operat.size); err != nil {
-		operat.done <- err
+		operat.err = err
+		operat.finish(err)
 		return
 	}
 	task := threadTaskSplit(operat.size, int64(operat.down.ThreadSize))
@@ -41,8 +42,7 @@ func (operat *operation) startMultith(groupPool *WaitGroupPool, task [][2]int64)
 			groupPool.Done()
 			break
 		}
-		total := int32(fileRange[1]-fileRange[0]) + 1
-		operat.operatCF.addTB(total, 0, fileRange[0], fileRange[1])
+		operat.operatCF.addTB(0, fileRange[0], fileRange[1])
 		go operat.multithSingle(idx, groupPool, fileRange[0], fileRange[1])
 	}
 	// 非阻塞等待所有任务完成
@@ -58,15 +58,14 @@ func (operat *operation) multithSingle(id int, groupPool *WaitGroupPool, rangeSt
 		return
 	}
 	defer res.Body.Close()
-
+	// 硬盘缓冲区大小
 	size := int(rangeEnd - rangeStart + 1)
 	bufSize := operat.operatFile.bufsize
 	if bufSize > size {
 		bufSize = size
 	}
-
+	// 新建硬盘缓冲区写入
 	buf := bufio.NewWriterSize(operat.operatFile.makeFileAt(id, rangeStart), bufSize)
-	// 写入到文件
 	_, err = io.Copy(buf, &ioProxyReader{reader: res.Body, send: func(n int) {
 		atomic.AddInt64(operat.stat.CompletedLength, int64(n))
 	}})
@@ -74,7 +73,7 @@ func (operat *operation) multithSingle(id int, groupPool *WaitGroupPool, rangeSt
 		groupPool.Error(err)
 		return
 	}
-
+	// 存盘
 	if err := buf.Flush(); err != nil {
 		groupPool.Error(err)
 	}

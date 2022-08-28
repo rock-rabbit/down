@@ -11,7 +11,6 @@ type operatFile struct {
 	ctx      context.Context
 	operatCF *operatCF
 	file     *os.File
-	cl       *int64
 	bufsize  int
 }
 
@@ -20,7 +19,7 @@ type operatFileAt struct {
 	of        *operatFile
 	id        int
 	start     int64
-	completed int32
+	completed int64
 }
 
 // newOperatFile 创建操作文件
@@ -52,8 +51,8 @@ func (ofat *operatFileAt) Write(p []byte) (n int, err error) {
 	}
 	err = ofat.of.file.Sync()
 	ofat.start += int64(n)
-	ofat.completed += int32(n)
+	ofat.completed += int64(n)
 	// 更新操作文件
-	ofat.of.operatCF.setTB(ofat.id, int32(ofat.completed))
+	ofat.of.operatCF.setTB(ofat.id, ofat.completed)
 	return
 }

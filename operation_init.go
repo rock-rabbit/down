@@ -66,7 +66,6 @@ func (operat *operation) init() error {
 	if err != nil {
 		return err
 	}
-	operat.operatFile.cl = operat.stat.CompletedLength
 	operat.operatFile.operatCF = operat.operatCF
 
 	return nil

@@ -2,63 +2,52 @@ package down
 
 import (
 	"bufio"
-	"fmt"
 	"io"
-	"os"
 	"sync/atomic"
 )
 
 // single 单线程，非断点续传
 func (operat *operation) single() {
-	defer operat.ctxCance()
-
-	f, err := os.OpenFile(operat.outputPath, os.O_CREATE|os.O_RDWR, operat.meta.Perm)
-	if err != nil {
-		operat.done <- fmt.Errorf("open file: %s", err)
+	if err := operat.operatFile.file.Truncate(operat.size); err != nil {
+		operat.err = err
+		operat.finish(err)
 		return
 	}
-	defer f.Close()
-
-	if err := f.Truncate(operat.size); err != nil {
-		operat.done <- err
-		return
-	}
-
+	// 自动保存控制文件
+	go operat.operatCF.autoSave(operat.down.AutoSaveTnterval)
+	// 每秒给 Hook 发送信息
+	go operat.sendStat(nil)
+	// 执行下载任务
+	operat.operatCF.addTB(0, 0, operat.size-1)
 	res, err := operat.defaultDo(nil)
 	if err != nil {
-		operat.done <- err
+		operat.err = err
+		operat.finish(err)
 		return
 	}
 	defer res.Body.Close()
-
-	// 每秒给 Hook 发送信息
-	go operat.sendStat(nil)
-	// 磁盘缓冲区
-	bufWriter := bufio.NewWriterSize(f, operat.down.DiskCache)
-	// 使用代理 io 写入文件
-	_, err = io.Copy(bufWriter, &ioProxyReader{reader: res.Body, send: func(n int) {
-		select {
-		case <-operat.ctx.Done():
-			res.Body.Close()
-		default:
-			atomic.AddInt64(operat.stat.CompletedLength, int64(n))
-		}
-	}})
-	// 缓冲数据写入到磁盘
-	bufWriter.Flush()
-	// 判断是否有错误
-	select {
-	case <-operat.ctx.Done():
-		operat.done <- operat.ctx.Err()
-	default:
-		if err != nil {
-			operat.done <- err
-			return
-		}
-		operat.finishHook()
+	// 硬盘缓冲区大小
+	bufSize := operat.operatFile.bufsize
+	if bufSize > int(operat.size) {
+		bufSize = int(operat.size)
 	}
-
-	operat.done <- nil
+	// 新建硬盘缓冲区写入
+	buf := bufio.NewWriterSize(operat.operatFile.makeFileAt(0, 0), bufSize)
+	_, err = io.Copy(buf, &ioProxyReader{reader: res.Body, send: func(n int) {
+		atomic.AddInt64(operat.stat.CompletedLength, int64(n))
+	}})
+	if err != nil {
+		operat.err = err
+		operat.finish(err)
+		return
+	}
+	// 存盘
+	if err := buf.Flush(); err != nil {
+		operat.err = err
+		operat.finish(err)
+		return
+	}
+	operat.finish(nil)
 }
 
 // singleBreakpoint 单线程，断点续传
