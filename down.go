@@ -99,25 +99,21 @@ func (down *Down) AddHook(perhook PerHook) {
 }
 
 // Run 执行下载，阻塞等待完成
-func (down *Down) Run(meta *Meta) error {
+func (down *Down) Run(meta *Meta) (string, error) {
 	return down.RunContext(context.Background(), meta)
 }
 
 // RunContext 基于 context 执行下载，阻塞等待完成
-func (down *Down) RunContext(ctx context.Context, meta *Meta) error {
+func (down *Down) RunContext(ctx context.Context, meta *Meta) (string, error) {
 	var (
 		err    error
 		operat *Operation
 	)
 	operat, err = down.StartContext(ctx, meta)
 	if err != nil {
-		return err
+		return "", err
 	}
-	err = operat.Wait()
-	if err != nil {
-		return err
-	}
-	return nil
+	return operat.Wait()
 }
 
 // Start 非阻塞运行
@@ -140,8 +136,9 @@ type Operation struct {
 }
 
 // Wait 阻塞等待完成
-func (o *Operation) Wait() error {
-	return o.operat.wait()
+func (o *Operation) Wait() (string, error) {
+	err := o.operat.wait()
+	return o.operat.outputPath, err
 }
 
 // operation 创建 operation

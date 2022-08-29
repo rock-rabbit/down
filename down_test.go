@@ -26,10 +26,11 @@ func TestDown(t *testing.T) {
 	// down.Default.ThreadSize = 1024 << 10
 	down.Default.ThreadCount = 1
 	// 执行下载, 你也可以使用 RunContext 传递一个 Context
-	err := down.Default.Run(meta)
+	path, err := down.Default.Run(meta)
 	if err != nil {
 		log.Panic(err)
 	}
+	fmt.Println("文件下载完成：" + path)
 }
 
 func TestRunDownServe(t *testing.T) {
@@ -70,7 +71,7 @@ func TestRunDownServe(t *testing.T) {
 			buf = bytes.NewBuffer(make([]byte, size))
 		}
 		io.Copy(w, &ioProxyReader{reader: bufio.NewReaderSize(buf, 1024), send: func(n int) {
-			time.Sleep(time.Duration(time.Millisecond) * 10)
+			time.Sleep(time.Duration(time.Millisecond) * 1)
 		}})
 	})
 	http.ListenAndServe(":25427", nil)

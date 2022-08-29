@@ -1,4 +1,3 @@
-**🥳 当前项目处于<font color=red>开发阶段</font>, 请勿使用，可作为参考**
 
 ## 🎤 简介
 
@@ -48,16 +47,17 @@ func main(){
 	// 创建一个基本下载信息
 	meta := down.NewMeta("http://downloadtest.kdatacenter.com/100MB", "./tmp", "")
 	// 添加一个请求头
-	meta.Header.Set("referer", "http://www.68wu.cn/")
-	// 给下载器添加进度条打印的 Hook
+	meta.Header.Set("referer", "https://im.qq.com/")
+	// down.Default 为默认配置的下载器, 你可以查看 Down 结构体配置自己的下载器
 	down.Default.AddHook(down.DefaultBarHook)
-	// 设置下载器的最大线程数，默认是 1
-	down.Default.ThreadCount = 5
+	// down.Default.ThreadSize = 1024 << 10
+	down.Default.ThreadCount = 1
 	// 执行下载, 你也可以使用 RunContext 传递一个 Context
-	err := down.Default.Run(meta)
+	path, err := down.Default.Run(meta)
 	if err != nil {
-		panic(err)
+		log.Panic(err)
 	}
+	fmt.Println("文件下载完成：" + path)
 }
 ```
 
