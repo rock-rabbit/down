@@ -1,11 +1,5 @@
 package down
 
-import (
-	"bufio"
-	"io"
-	"sync/atomic"
-)
-
 // multith 多线程下载
 func (operat *operation) multith() {
 	if err := operat.operatFile.file.Truncate(operat.size); err != nil {
@@ -42,7 +36,7 @@ func (operat *operation) startMultith(groupPool *WaitGroupPool, task [][2]int64)
 			groupPool.Done()
 			break
 		}
-		operat.operatCF.addTB(0, fileRange[0], fileRange[1])
+		operat.operatCF.addTreadblock(0, fileRange[0], fileRange[1])
 		go operat.multithSingle(idx, groupPool, fileRange[0], fileRange[1], 0)
 	}
 	// 非阻塞等待所有任务完成
@@ -50,32 +44,19 @@ func (operat *operation) startMultith(groupPool *WaitGroupPool, task [][2]int64)
 }
 
 // multithSingle 多线程下载中单个线程的下载逻辑
-func (operat *operation) multithSingle(id int, groupPool *WaitGroupPool, rangeStart, rangeEnd, completed int64) {
+func (operat *operation) multithSingle(id int, groupPool *WaitGroupPool, start, end, completed int64) {
 	defer groupPool.Done()
-	res, err := operat.rangeDo(rangeStart, rangeEnd)
+	res, err := operat.rangeDo(start, end)
 	if err != nil {
 		groupPool.Error(err)
 		return
 	}
 	defer res.Body.Close()
-	// 硬盘缓冲区大小
-	size := int(rangeEnd - rangeStart + 1)
-	bufSize := operat.operatFile.bufsize
-	if bufSize > size {
-		bufSize = size
-	}
-	// 新建硬盘缓冲区写入
-	buf := bufio.NewWriterSize(operat.operatFile.makeFileAt(id, rangeStart, completed), bufSize)
-	_, err = io.Copy(buf, &ioProxyReader{reader: res.Body, send: func(n int) {
-		atomic.AddInt64(operat.stat.CompletedLength, int64(n))
-	}})
+	// 写入到文件
+	err = operat.operatFile.iocopy(res.Body, start, id, int(end-start+1))
 	if err != nil {
 		groupPool.Error(err)
 		return
-	}
-	// 存盘
-	if err := buf.Flush(); err != nil {
-		groupPool.Error(err)
 	}
 }
 
@@ -104,7 +85,7 @@ func (operat *operation) multithBreakpoint() {
 // startMultith 执行多线程
 func (operat *operation) startMultithBreakpoint(groupPool *WaitGroupPool) {
 	// 已分配的数据块
-	for id, block := range operat.operatCF.getCF().threadblock {
+	for id, block := range operat.operatCF.cf.threadblock {
 		if block.completed == (block.end-block.start)+1 {
 			continue
 		}
@@ -117,8 +98,8 @@ func (operat *operation) startMultithBreakpoint(groupPool *WaitGroupPool) {
 		go operat.multithSingle(id, groupPool, block.start+block.completed, block.end, block.completed)
 	}
 	// 未分配的任务块
-	threadblocklen := len(operat.operatCF.getCF().threadblock)
-	startsize := operat.operatCF.getCF().threadblock[threadblocklen-1].end + 1
+	threadblocklen := len(operat.operatCF.cf.threadblock)
+	startsize := operat.operatCF.cf.threadblock[threadblocklen-1].end + 1
 	for idx, task := range threadTaskSplit(startsize, operat.size, int64(operat.down.ThreadSize)) {
 		groupPool.Add()
 		// 中途关闭
@@ -126,7 +107,7 @@ func (operat *operation) startMultithBreakpoint(groupPool *WaitGroupPool) {
 			groupPool.Done()
 			break
 		}
-		operat.operatCF.addTB(0, task[0], task[1])
+		operat.operatCF.addTreadblock(0, task[0], task[1])
 		id := threadblocklen + idx
 		go operat.multithSingle(id, groupPool, task[0], task[1], 0)
 	}

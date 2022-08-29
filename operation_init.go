@@ -53,8 +53,8 @@ func (operat *operation) init() error {
 		if err != nil {
 			return err
 		}
-		operat.operatCF.newControlfile()
-		operat.operatCF.getCF().total = operat.size
+		operat.operatCF.cf = newControlfile(0)
+		operat.operatCF.cf.total = operat.size
 	}
 
 	// 创建 Hook
@@ -64,7 +64,7 @@ func (operat *operation) init() error {
 	}
 
 	// 创建操作文件
-	operat.operatFile, err = newOperatFile(operat.ctx, operat.outputPath, operat.meta.Perm, operat.down.DiskCache)
+	operat.operatFile, err = newOperatFile(operat.ctx, operat.outputPath, operat.meta.Perm, operat.down.DiskCache, operat.stat.CompletedLength)
 	if err != nil {
 		return err
 	}
@@ -101,17 +101,13 @@ func (operat *operation) checkFile() error {
 
 	operat.operatCF = newOperatCF(operat.ctx)
 	if operat.multithread && outputPathExist && operat.down.Continue && controlfileExist {
-		// 可以使用断点下载 并且 存在控制文件
-		err = operat.operatCF.open(operat.controlfilePath, operat.meta.Perm)
+		// 尝试读取并解析控制文件
+		err = operat.operatCF.read(operat.controlfilePath, operat.meta.Perm)
 		if err != nil {
 			return err
 		}
-		err = operat.operatCF.read()
-		if err != nil {
-			return err
-		}
-		if operat.operatCF.getCF() != nil && operat.checkControlfile() {
-			atomic.SwapInt64(operat.stat.CompletedLength, operat.operatCF.getCF().CompletedLength())
+		if operat.operatCF.cf != nil && operat.operatCF.cf.total == operat.size {
+			atomic.SwapInt64(operat.stat.CompletedLength, operat.operatCF.cf.CompletedLength())
 			operat.breakpoint = true
 			return nil
 		}
@@ -135,11 +131,6 @@ func (operat *operation) checkFile() error {
 	}
 
 	return nil
-}
-
-// checkControlfile 检查控制文件
-func (operat *operation) checkControlfile() bool {
-	return operat.operatCF.getCF().total == operat.size
 }
 
 // usefilepath 应用文件路径

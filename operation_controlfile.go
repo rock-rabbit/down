@@ -66,8 +66,8 @@ func (ocf *operatCF) newControlfile() {
 	ocf.cf = newControlfile(0)
 }
 
-// addTB 添加数据块
-func (ocf *operatCF) addTB(completed, start, end int64) {
+// addTreadblock 添加数据块
+func (ocf *operatCF) addTreadblock(completed, start, end int64) int {
 	ocf.mux.Lock()
 	defer ocf.mux.Unlock()
 	ocf.cf.threadblock = append(ocf.cf.threadblock, &threadblock{
@@ -76,10 +76,11 @@ func (ocf *operatCF) addTB(completed, start, end int64) {
 		end:       end,
 	})
 	ocf.change = true
+	return len(ocf.cf.threadblock) - 1
 }
 
-// setTB 设置数据块
-func (ocf *operatCF) setTB(key int, completed int64) {
+// addCompleted 添加数据块已完成的数据量
+func (ocf *operatCF) addCompleted(key int, completed int64) {
 	ocf.mux.Lock()
 	defer ocf.mux.Unlock()
 	ocf.cf.threadblock[key].completed = completed
@@ -112,17 +113,29 @@ func (ocf *operatCF) save() {
 	ocf.file.Sync()
 }
 
-// getCF 获取控制文件
-func (ocf *operatCF) getCF() *controlfile {
-	return ocf.cf
-}
-
 // remove 删除控制文件
 func (ocf *operatCF) remove() {
 	if ocf.file != nil {
 		ocf.close()
 		os.Remove(ocf.path)
 	}
+}
+
+// read 读取控制文件
+func (ocf *operatCF) read(path string, perm fs.FileMode) error {
+	err := ocf.open(path, perm)
+	if err != nil {
+		return err
+	}
+	data, err := io.ReadAll(ocf.file)
+	if err != nil {
+		return err
+	}
+	cf := ParseControlfile(data)
+	if cf != nil {
+		ocf.cf = cf
+	}
+	return nil
 }
 
 // open 打开文件
@@ -133,19 +146,6 @@ func (ocf *operatCF) open(path string, perm fs.FileMode) error {
 	}
 	ocf.file = f
 	ocf.path = path
-	return nil
-}
-
-// read 读取文件
-func (ocf *operatCF) read() error {
-	data, err := io.ReadAll(ocf.file)
-	if err != nil {
-		return err
-	}
-	cf := ParseControlfile(data)
-	if cf != nil {
-		ocf.cf = cf
-	}
 	return nil
 }
 
