@@ -49,10 +49,9 @@ func (ofat *operatFileAt) Write(p []byte) (n int, err error) {
 	if err != nil {
 		return n, err
 	}
-	err = ofat.of.file.Sync()
+
 	ofat.start += int64(n)
 	ofat.completed += int64(n)
-
 	// 更新操作文件
 	ofat.of.operatCF.setTB(ofat.id, ofat.completed)
 	return

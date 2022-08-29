@@ -69,7 +69,7 @@ func (operat *operation) init() error {
 		return err
 	}
 	operat.operatFile.operatCF = operat.operatCF
-
+	operat.operatCF.operatFile = operat.operatFile
 	return nil
 }
 

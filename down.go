@@ -52,6 +52,9 @@ type Down struct {
 var (
 	// Default 默认下载器
 	Default = New()
+
+	// Error 自定义错误
+	ErrorFileExist = "已存在文件 %s，若允许替换文件请将 down.AllowOverwrite 设为 true"
 )
 
 // New 创建一个默认的下载器

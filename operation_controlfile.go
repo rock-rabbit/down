@@ -44,12 +44,13 @@ type threadblock struct {
 
 // operatCF 操作控制文件
 type operatCF struct {
-	ctx    context.Context
-	path   string
-	file   *os.File
-	cf     *controlfile
-	change bool
-	mux    sync.Mutex
+	ctx        context.Context
+	path       string
+	file       *os.File
+	operatFile *operatFile
+	cf         *controlfile
+	change     bool
+	mux        sync.Mutex
 }
 
 // newOperatCF 新建操控控制文件
@@ -104,8 +105,10 @@ func (ocf *operatCF) autoSave(d time.Duration) {
 
 // save 保存控制文件
 func (ocf *operatCF) save() {
+	// 防止系统崩溃导致的数据丢失，下载的文件需要强制刷入到磁盘
 	ocf.file.Seek(0, 0)
 	io.Copy(ocf.file, ocf.cf.Encoding())
+	ocf.operatFile.file.Sync()
 	ocf.file.Sync()
 }
 
