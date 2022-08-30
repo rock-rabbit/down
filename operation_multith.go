@@ -9,10 +9,8 @@ func (operat *operation) multith() {
 	task := threadTaskSplit(0, operat.size, int64(operat.down.ThreadSize))
 	// 任务执行
 	groupPool := NewWaitGroupPool(operat.down.ThreadCount)
-	// 自动保存控制文件
-	go operat.operatCF.autoSave(operat.down.AutoSaveTnterval)
-	// 每秒给 Hook 发送信息
-	go operat.sendStat(groupPool)
+	// 自动处理
+	operat.autoProcessing(groupPool)
 	// 执行多线程任务
 	go operat.startMultith(groupPool, task)
 	// 阻塞等待所有线程完成后返回结果
@@ -64,10 +62,8 @@ func (operat *operation) multithSingle(id int, groupPool *WaitGroupPool, start, 
 func (operat *operation) multithBreakpoint() {
 	// 任务执行
 	groupPool := NewWaitGroupPool(operat.down.ThreadCount)
-	// 自动保存控制文件
-	go operat.operatCF.autoSave(operat.down.AutoSaveTnterval)
-	// 每秒给 Hook 发送信息
-	go operat.sendStat(groupPool)
+	// 自动处理
+	operat.autoProcessing(groupPool)
 	// 执行多线程任务
 	go operat.startMultithBreakpoint(groupPool)
 	// 阻塞等待所有线程完成后返回结果

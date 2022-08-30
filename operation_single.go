@@ -6,10 +6,8 @@ func (operat *operation) single() {
 		operat.finish(err)
 		return
 	}
-	// 自动保存控制文件
-	go operat.operatCF.autoSave(operat.down.AutoSaveTnterval)
-	// 每秒给 Hook 发送信息
-	go operat.sendStat(nil)
+	// 自动处理
+	operat.autoProcessing(nil)
 	// 执行下载任务
 	operat.operatCF.addTreadblock(0, 0, operat.size-1)
 	res, err := operat.defaultDo(nil)
@@ -31,10 +29,8 @@ func (operat *operation) single() {
 
 // singleBreakpoint 单线程，断点续传
 func (operat *operation) singleBreakpoint() {
-	// 自动保存控制文件
-	go operat.operatCF.autoSave(operat.down.AutoSaveTnterval)
-	// 每秒给 Hook 发送信息
-	go operat.sendStat(nil)
+	// 自动处理
+	operat.autoProcessing(nil)
 	// 已分配的数据块
 	var err error
 	for id, block := range operat.operatCF.cf.threadblock {

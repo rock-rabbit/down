@@ -177,6 +177,14 @@ func (operat *operation) sendHook(stat *Stat) error {
 	return nil
 }
 
+// autoProcessing 自动保存控制文件、固定时间给 Hook 发送信息
+func (operat *operation) autoProcessing(groupPool *WaitGroupPool) {
+	// 自动保存控制文件
+	go operat.operatCF.autoSave(operat.down.AutoSaveTnterval)
+	// 固定时间给 Hook 发送信息
+	go operat.sendStat(groupPool)
+}
+
 // sendStat 下载资源途中对数据的处理和发送 Hook
 func (operat *operation) sendStat(groupPool *WaitGroupPool) {
 	oldCompletedLength := atomic.LoadInt64(operat.stat.CompletedLength)
