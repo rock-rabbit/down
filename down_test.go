@@ -3,6 +3,7 @@ package down_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -16,28 +17,57 @@ import (
 )
 
 func TestDown(t *testing.T) {
-	go TestRunDownServe(t)
-	// 创建一个基本下载信息
-	meta := down.NewMeta("http://127.0.0.1:25427/down.bin", "./tmp", "")
-	// 添加一个请求头
-	meta.Header.Set("referer", "https://im.qq.com/")
-	// down.Default 为默认配置的下载器, 你可以查看 Down 结构体配置自己的下载器
-	down.Default.AddHook(down.DefaultBarHook)
-	// down.Default.ThreadSize = 1024 << 10
-	down.Default.ThreadCount = 1
-	// 执行下载, 你也可以使用 RunContext 传递一个 Context
-	path, err := down.Default.Run(meta)
-	if err != nil {
-		log.Panic(err)
-	}
-	fmt.Println("文件下载完成：" + path)
+
+	t.Run("正常下载", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go rundownserve(t, ctx)
+		// 创建一个基本下载信息
+		meta := down.NewMeta("http://127.0.0.1:25427/down.bin", "./tmp", "")
+		// 添加一个请求头
+		meta.Header.Set("referer", "https://im.qq.com/")
+		// down.Default 为默认配置的下载器, 你可以查看 Down 结构体配置自己的下载器
+		down.Default.AddHook(down.DefaultBarHook)
+		// down.Default.ThreadSize = 1024 << 10
+		down.Default.ThreadCount = 1
+		// 执行下载, 你也可以使用 RunContext 传递一个 Context
+		path, err := down.Default.Run(meta)
+		if err != nil {
+			log.Panic(err)
+		}
+		fmt.Println("文件下载完成：" + path)
+	})
+
+	t.Run("下载中途失败", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+		defer cancel()
+		go rundownserve(t, ctx)
+		// 创建一个基本下载信息
+		meta := down.NewMeta("http://127.0.0.1:25427/down.bin", "./tmp", "")
+		// 添加一个请求头
+		meta.Header.Set("referer", "https://im.qq.com/")
+		// down.Default 为默认配置的下载器, 你可以查看 Down 结构体配置自己的下载器
+		down.Default.AddHook(down.DefaultBarHook)
+		// down.Default.ThreadSize = 1024 << 10
+		down.Default.ThreadCount = 1
+		// 执行下载, 你也可以使用 RunContext 传递一个 Context
+		path, err := down.Default.Run(meta)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		log.Panic("文件下载完成：" + path)
+	})
+
 }
 
-func TestRunDownServe(t *testing.T) {
+func rundownserve(t *testing.T, ctx context.Context) {
 
-	size := 1024 << 20
+	size := 1024 << 17
 
-	http.HandleFunc("/down.bin", func(w http.ResponseWriter, r *http.Request) {
+	handmux := http.NewServeMux()
+
+	handmux.HandleFunc("/down.bin", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodHead {
 			w.Header().Add("Accept-Ranges", "bytes")
 			w.Header().Add("Content-Length", fmt.Sprint(size))
@@ -74,7 +104,21 @@ func TestRunDownServe(t *testing.T) {
 			time.Sleep(time.Duration(time.Millisecond) * 1)
 		}})
 	})
-	http.ListenAndServe(":25427", nil)
+
+	serve := &http.Server{
+		Addr:         ":25427",
+		Handler:      handmux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+	}
+
+	go serve.ListenAndServe()
+
+	select {
+	case <-ctx.Done():
+		serve.Close()
+	}
+
 }
 
 // ioProxyReader 代理 io 读

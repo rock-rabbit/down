@@ -260,7 +260,7 @@ func (barhook *BarHook) render() error {
 }
 
 // Finish 完成后的渲染, 会将进度设为 100%
-func (barhook *BarHook) Finish(stat *Stat) error {
+func (barhook *BarHook) Finish(downerr error, stat *Stat) error {
 	if barhook.Hide {
 		return nil
 	}
@@ -269,10 +269,13 @@ func (barhook *BarHook) Finish(stat *Stat) error {
 		fmt.Printf("\r%s\r", strings.Repeat(" ", barhook.Template.BarWidth))
 		return nil
 	}
-	barhook.finish = true
-	barhook.stat.CompletedLength = barhook.stat.TotalLength
-	barhook.stat.Progress = 100
-	barhook.render()
+	// 下载成功时
+	if downerr == nil {
+		barhook.finish = true
+		barhook.stat.CompletedLength = barhook.stat.TotalLength
+		barhook.stat.Progress = 100
+		barhook.render()
+	}
 	fmt.Println()
 	return nil
 }

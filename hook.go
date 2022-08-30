@@ -9,7 +9,7 @@ type PerHook interface {
 
 type Hook interface {
 	Send(*Stat) error
-	Finish(*Stat) error
+	Finish(error, *Stat) error
 }
 
 type Hooks []Hook
@@ -25,10 +25,10 @@ func (hooks Hooks) Send(stat *Stat) error {
 	return nil
 }
 
-func (hooks Hooks) Finish(stat *Stat) error {
+func (hooks Hooks) Finish(downerr error, stat *Stat) error {
 	var err error
 	for _, hook := range hooks {
-		err = hook.Finish(stat)
+		err = hook.Finish(downerr, stat)
 		if err != nil {
 			return err
 		}

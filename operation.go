@@ -115,9 +115,9 @@ func (operat *operation) finish(err error) {
 	operat.operatFile.close()
 
 	operat.err = err
+	// 发送完成 Hook
+	operat.finishHook(err)
 	if err == nil {
-		// 发送成功 Hook
-		operat.finishHook()
 		// 删除控制文件
 		operat.operatCF.remove()
 	}
@@ -150,13 +150,14 @@ func (operat *operation) copyHooks() []Hook {
 }
 
 // finishHook 下载完成时通知 Hook
-func (operat *operation) finishHook() error {
+func (operat *operation) finishHook(down error) error {
 	tmpHooks := operat.copyHooks()
 
-	err := Hooks(tmpHooks).Finish(&Stat{
+	err := Hooks(tmpHooks).Finish(down, &Stat{
 		Meta:        operat.meta,
 		Down:        operat.down,
 		TotalLength: operat.size,
+		OutputPath:  operat.outputPath,
 	})
 
 	if err != nil {
