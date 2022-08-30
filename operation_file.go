@@ -31,8 +31,8 @@ type operatFile struct {
 }
 
 // newOperatFile 创建操作文件
-func newOperatFile(ctx context.Context, path string, perm fs.FileMode, bufsize int, cl *int64) (*operatFile, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, perm)
+func newOperatFile(ctx context.Context, operatCF *operatCF, outpath string, cl *int64, bufsize int, perm fs.FileMode) (*operatFile, error) {
+	f, err := os.OpenFile(outpath, os.O_CREATE|os.O_RDWR, perm)
 	if err != nil {
 		return nil, err
 	}
@@ -65,6 +65,7 @@ func (of *operatFile) iocopy(src io.Reader, start int64, blockid, dataSize int) 
 
 // close 关闭文件
 func (of *operatFile) close() {
+	of.operatCF.close()
 	if of.file != nil {
 		of.file.Close()
 	}

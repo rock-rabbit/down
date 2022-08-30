@@ -54,7 +54,8 @@ var (
 	Default = New()
 
 	// Error 自定义错误
-	ErrorFileExist = "已存在文件 %s，若允许替换文件请将 down.AllowOverwrite 设为 true"
+	ErrorFileExist     = "已存在文件 %s，若允许替换文件请将 down.AllowOverwrite 设为 true"
+	ErrorRequestStatus = "%s HTTP Status Code %d"
 )
 
 // New 创建一个默认的下载器
@@ -123,7 +124,7 @@ func (down *Down) Start(meta *Meta) (*Operation, error) {
 
 // StartContext 基于 context 非阻塞运行
 func (down *Down) StartContext(ctx context.Context, meta *Meta) (*Operation, error) {
-	operat := down.operation(ctx, meta)
+	operat := down.operation(ctx, []*Meta{meta})
 	if err := operat.start(); err != nil {
 		return nil, fmt.Errorf("down error: %s", err)
 	}
@@ -138,23 +139,19 @@ type Operation struct {
 // Wait 阻塞等待完成
 func (o *Operation) Wait() (string, error) {
 	err := o.operat.wait()
-	return o.operat.outputPath, err
+	return "", err
 }
 
 // operation 创建 operation
-func (down *Down) operation(ctx context.Context, meta *Meta) *operation {
+func (down *Down) operation(ctx context.Context, meta []*Meta) *operation {
 	var operat *operation
+	tmpMeta := make([]*Meta, len(meta))
+	for i := 0; i < len(meta); i++ {
+		tmpMeta[i] = meta[i].copy()
+	}
 	// 组合操作结构,将配置拷贝一份
 	down.mux.Lock()
-	operat = &operation{
-		down: down.copy(),
-		meta: meta.copy(),
-		stat: &stating{
-			CompletedLength: new(int64),
-		},
-		ctx:  ctx,
-		done: make(chan error),
-	}
+	operat = newOperation(ctx, down.copy(), tmpMeta)
 	down.mux.Unlock()
 	return operat
 }

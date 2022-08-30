@@ -44,21 +44,53 @@ type threadblock struct {
 
 // operatCF 操作控制文件
 type operatCF struct {
-	ctx        context.Context
-	path       string
-	file       *os.File
-	operatFile *operatFile
-	cf         *controlfile
-	change     bool
-	mux        sync.Mutex
+	ctx    context.Context
+	path   string
+	file   *os.File
+	cf     *controlfile
+	change bool
+	mux    sync.Mutex
 }
 
 // newOperatCF 新建操控控制文件
-func newOperatCF(ctx context.Context) *operatCF {
+func newOperatCF(ctx context.Context, ctlpath string) *operatCF {
 	return &operatCF{
-		ctx: ctx,
-		mux: sync.Mutex{},
+		ctx:  ctx,
+		path: ctlpath,
+		mux:  sync.Mutex{},
 	}
+}
+
+// check 检查是否可以断点续传，控制文件损坏就删除
+func (ocf *operatCF) check(perm fs.FileMode) (bool, error) {
+	f, err := os.OpenFile(ocf.path, os.O_CREATE|os.O_RDWR, perm)
+	if err != nil {
+		return false, err
+	}
+	remove := func() error {
+		err := f.Close()
+		if err != nil {
+			return err
+		}
+		err = os.Remove(ocf.path)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		f.Close()
+		return false, err
+	}
+	cf := parseControlfile(data)
+	if cf != nil {
+		ocf.file = f
+		ocf.cf = cf
+	} else {
+		return false, remove()
+	}
+	return true, nil
 }
 
 // addTreadblock 添加数据块
@@ -103,8 +135,8 @@ func (ocf *operatCF) autoSave(d time.Duration) {
 func (ocf *operatCF) save() {
 	// 防止系统崩溃导致的数据丢失，下载的文件需要强制刷入到磁盘
 	ocf.file.Seek(0, 0)
-	io.Copy(ocf.file, ocf.cf.Encoding())
-	ocf.operatFile.file.Sync()
+	io.Copy(ocf.file, ocf.cf.encoding())
+	// ocf.operatFile.file.Sync()
 	ocf.file.Sync()
 }
 
@@ -116,31 +148,13 @@ func (ocf *operatCF) remove() {
 	}
 }
 
-// read 读取控制文件
-func (ocf *operatCF) read(path string, perm fs.FileMode) error {
-	err := ocf.open(path, perm)
-	if err != nil {
-		return err
-	}
-	data, err := io.ReadAll(ocf.file)
-	if err != nil {
-		return err
-	}
-	cf := ParseControlfile(data)
-	if cf != nil {
-		ocf.cf = cf
-	}
-	return nil
-}
-
 // open 打开文件
-func (ocf *operatCF) open(path string, perm fs.FileMode) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, perm)
+func (ocf *operatCF) open(perm fs.FileMode) error {
+	f, err := os.OpenFile(ocf.path, os.O_CREATE|os.O_RDWR, perm)
 	if err != nil {
 		return err
 	}
 	ocf.file = f
-	ocf.path = path
 	return nil
 }
 
@@ -151,8 +165,8 @@ func (ocf *operatCF) close() {
 	}
 }
 
-// CompletedLength 获取已下载的数据长度
-func (cf *controlfile) CompletedLength() int64 {
+// completedLength 获取已下载的数据长度
+func (cf *controlfile) completedLength() int64 {
 	if len(cf.threadblock) == 0 {
 		return 0
 	}
@@ -163,8 +177,8 @@ func (cf *controlfile) CompletedLength() int64 {
 	return count
 }
 
-// Encoding 编码输出二进制
-func (cf *controlfile) Encoding() *bytes.Buffer {
+// encoding 编码输出二进制
+func (cf *controlfile) encoding() *bytes.Buffer {
 	buf := bytes.NewBuffer(make([]byte, 0, len(cf.threadblock)*THREADBLOCKSIZE+CONTROLFILESIZE))
 	binaryWrite := binaryWriteFunc(buf, binary.BigEndian)
 	binaryWrite([]byte(CONTROLFILEHEAD))
@@ -197,8 +211,8 @@ func newControlfile(size int) *controlfile {
 	}
 }
 
-// ParseControlfile 解析控制文件
-func ParseControlfile(data []byte) *controlfile {
+// parseControlfile 解析控制文件
+func parseControlfile(data []byte) *controlfile {
 	dataLen := len(data)
 	// 检查是否符合规范
 	if dataLen < CONTROLFILESIZE || string(data[:4]) != CONTROLFILEHEAD || (dataLen-14)%THREADBLOCKSIZE != 0 {

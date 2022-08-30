@@ -2,6 +2,7 @@ package down
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"math"
@@ -195,4 +196,14 @@ func getFileName(uri, contentDisposition, contentType string, headinfo []byte) s
 	}
 	// 名称获取失败时随机生成名称
 	return fmt.Sprintf("file_%s%d%s", randomString(5, 1), time.Now().UnixNano(), ext)
+}
+
+// contextDone 上下文是否关闭
+func contextDone(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
 }
