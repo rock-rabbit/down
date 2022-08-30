@@ -113,6 +113,8 @@ func (operat *operation) finish(err error) {
 	operat.ctxCance()
 	operat.operatCF.close()
 	operat.operatFile.close()
+
+	operat.err = err
 	if err == nil {
 		// 发送成功 Hook
 		operat.finishHook()

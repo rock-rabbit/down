@@ -3,7 +3,6 @@ package down
 // multith 多线程下载
 func (operat *operation) multith() {
 	if err := operat.operatFile.file.Truncate(operat.size); err != nil {
-		operat.err = err
 		operat.finish(err)
 		return
 	}
@@ -17,11 +16,12 @@ func (operat *operation) multith() {
 	// 执行多线程任务
 	go operat.startMultith(groupPool, task)
 	// 阻塞等待所有线程完成后返回结果
+	var tmperr error
 	for err := range groupPool.AllDone() {
 		if err != nil {
-			operat.err = err
+			tmperr = err
 		} else {
-			operat.finish(operat.err)
+			operat.finish(tmperr)
 			return
 		}
 	}
@@ -71,15 +71,15 @@ func (operat *operation) multithBreakpoint() {
 	// 执行多线程任务
 	go operat.startMultithBreakpoint(groupPool)
 	// 阻塞等待所有线程完成后返回结果
+	var tmperr error
 	for err := range groupPool.AllDone() {
 		if err != nil {
-			operat.err = err
+			tmperr = err
 		} else {
-			operat.finish(operat.err)
+			operat.finish(tmperr)
 			return
 		}
 	}
-	operat.finish(operat.err)
 }
 
 // startMultith 执行多线程

@@ -61,11 +61,6 @@ func newOperatCF(ctx context.Context) *operatCF {
 	}
 }
 
-// newControlfile 创建控制文件
-func (ocf *operatCF) newControlfile() {
-	ocf.cf = newControlfile(0)
-}
-
 // addTreadblock 添加数据块
 func (ocf *operatCF) addTreadblock(completed, start, end int64) int {
 	ocf.mux.Lock()

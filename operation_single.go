@@ -3,7 +3,6 @@ package down
 // single 单线程，非断点续传
 func (operat *operation) single() {
 	if err := operat.operatFile.file.Truncate(operat.size); err != nil {
-		operat.err = err
 		operat.finish(err)
 		return
 	}
@@ -15,7 +14,6 @@ func (operat *operation) single() {
 	operat.operatCF.addTreadblock(0, 0, operat.size-1)
 	res, err := operat.defaultDo(nil)
 	if err != nil {
-		operat.err = err
 		operat.finish(err)
 		return
 	}
@@ -24,7 +22,6 @@ func (operat *operation) single() {
 	// 写入文件
 	err = operat.operatFile.iocopy(res.Body, 0, 0, operat.operatFile.bufsize)
 	if err != nil {
-		operat.err = err
 		operat.finish(err)
 		return
 	}
@@ -46,7 +43,6 @@ func (operat *operation) singleBreakpoint() {
 		}
 		err = operat.singleBreakpointBlock(id, block.start+block.completed, block.end, block.completed)
 		if err != nil {
-			operat.err = err
 			operat.finish(err)
 			return
 		}
@@ -58,7 +54,6 @@ func (operat *operation) singleBreakpoint() {
 		id := len(operat.operatCF.cf.threadblock) - 1
 		err = operat.singleBreakpointBlock(id, blockallsize, operat.size-1, 0)
 		if err != nil {
-			operat.err = err
 			operat.finish(err)
 			return
 		}
