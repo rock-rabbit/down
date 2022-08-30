@@ -18,19 +18,16 @@ import (
 
 func TestDown(t *testing.T) {
 
-	t.Run("正常下载", func(t *testing.T) {
+	meta := down.NewMeta("http://127.0.0.1:25427/down.bin", "./tmp", "")
+	down.Default.AddHook(down.DefaultBarHook)
+
+	t.Run("单线程-正常下载", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go rundownserve(t, ctx)
-		// 创建一个基本下载信息
-		meta := down.NewMeta("http://127.0.0.1:25427/down.bin", "./tmp", "")
-		// 添加一个请求头
-		meta.Header.Set("referer", "https://im.qq.com/")
-		// down.Default 为默认配置的下载器, 你可以查看 Down 结构体配置自己的下载器
-		down.Default.AddHook(down.DefaultBarHook)
-		// down.Default.ThreadSize = 1024 << 10
+
 		down.Default.ThreadCount = 1
-		// 执行下载, 你也可以使用 RunContext 传递一个 Context
+
 		path, err := down.Default.Run(meta)
 		if err != nil {
 			log.Panic(err)
@@ -38,19 +35,42 @@ func TestDown(t *testing.T) {
 		fmt.Println("文件下载完成：" + path)
 	})
 
-	t.Run("下载中途失败", func(t *testing.T) {
+	t.Run("多线程-正常下载", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go rundownserve(t, ctx)
+
+		down.Default.ThreadCount = 5
+
+		path, err := down.Default.Run(meta)
+		if err != nil {
+			log.Panic(err)
+		}
+		fmt.Println("文件下载完成：" + path)
+	})
+
+	t.Run("单线程-下载中途失败", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 		defer cancel()
 		go rundownserve(t, ctx)
-		// 创建一个基本下载信息
-		meta := down.NewMeta("http://127.0.0.1:25427/down.bin", "./tmp", "")
-		// 添加一个请求头
-		meta.Header.Set("referer", "https://im.qq.com/")
-		// down.Default 为默认配置的下载器, 你可以查看 Down 结构体配置自己的下载器
-		down.Default.AddHook(down.DefaultBarHook)
-		// down.Default.ThreadSize = 1024 << 10
+
 		down.Default.ThreadCount = 1
-		// 执行下载, 你也可以使用 RunContext 传递一个 Context
+
+		path, err := down.Default.Run(meta)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		log.Panic("文件下载完成：" + path)
+	})
+
+	t.Run("多线程-下载中途失败", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+		defer cancel()
+		go rundownserve(t, ctx)
+
+		down.Default.ThreadCount = 5
+
 		path, err := down.Default.Run(meta)
 		if err != nil {
 			fmt.Println(err)
