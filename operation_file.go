@@ -36,7 +36,7 @@ func newOperatFile(ctx context.Context, operatCF *operatCF, outpath string, cl *
 	if err != nil {
 		return nil, err
 	}
-	return &operatFile{ctx: ctx, file: f, bufsize: bufsize, cl: cl}, nil
+	return &operatFile{ctx: ctx, file: f, bufsize: bufsize, cl: cl, operatCF: operatCF}, nil
 }
 
 // makeFileAt 创建文件位置的操作文件

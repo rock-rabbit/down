@@ -54,6 +54,7 @@ var (
 	Default = New()
 
 	// Error 自定义错误
+	ErrorDefault       = "down error: %v"
 	ErrorFileExist     = "已存在文件 %s，若允许替换文件请将 down.AllowOverwrite 设为 true"
 	ErrorRequestStatus = "%s HTTP Status Code %d"
 )
@@ -106,15 +107,14 @@ func (down *Down) Run(meta *Meta) (string, error) {
 
 // RunContext 基于 context 执行下载，阻塞等待完成
 func (down *Down) RunContext(ctx context.Context, meta *Meta) (string, error) {
-	var (
-		err    error
-		operat *Operation
-	)
-	operat, err = down.StartContext(ctx, meta)
+	outpath, err := down.RunMergingContext(ctx, []*Meta{meta})
 	if err != nil {
 		return "", err
 	}
-	return operat.Wait()
+	if len(outpath) > 0 {
+		return outpath[0], err
+	}
+	return "", nil
 }
 
 // Start 非阻塞运行
@@ -124,9 +124,37 @@ func (down *Down) Start(meta *Meta) (*Operation, error) {
 
 // StartContext 基于 context 非阻塞运行
 func (down *Down) StartContext(ctx context.Context, meta *Meta) (*Operation, error) {
-	operat := down.operation(ctx, []*Meta{meta})
+	return down.MergingStartContext(ctx, []*Meta{meta})
+}
+
+// RunMerging 合并下载，阻塞运行
+func (down *Down) RunMerging(meta []*Meta) ([]string, error) {
+	return down.RunMergingContext(context.Background(), meta)
+}
+
+// RunMerging 基于 context 合并下载，阻塞运行
+func (down *Down) RunMergingContext(ctx context.Context, meta []*Meta) ([]string, error) {
+	var (
+		err    error
+		operat *Operation
+	)
+	operat, err = down.MergingStartContext(ctx, meta)
+	if err != nil {
+		return []string{}, err
+	}
+	return operat.Wait()
+}
+
+// MergingStart 合并下载，非阻塞运行
+func (down *Down) MergingStart(meta []*Meta) (*Operation, error) {
+	return down.MergingStartContext(context.Background(), meta)
+}
+
+// MergingStartContext 基于 context 合并下载，非阻塞运行
+func (down *Down) MergingStartContext(ctx context.Context, meta []*Meta) (*Operation, error) {
+	operat := down.operation(ctx, meta)
 	if err := operat.start(); err != nil {
-		return nil, fmt.Errorf("down error: %s", err)
+		return nil, fmt.Errorf(ErrorDefault, err)
 	}
 	return &Operation{operat: operat}, nil
 }
@@ -137,9 +165,12 @@ type Operation struct {
 }
 
 // Wait 阻塞等待完成
-func (o *Operation) Wait() (string, error) {
+func (o *Operation) Wait() ([]string, error) {
 	err := o.operat.wait()
-	return "", err
+	if err != nil {
+		return o.operat.getOutpath(), fmt.Errorf(ErrorDefault, err)
+	}
+	return o.operat.getOutpath(), nil
 }
 
 // operation 创建 operation

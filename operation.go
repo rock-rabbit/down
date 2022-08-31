@@ -53,6 +53,7 @@ func newOperation(ctx context.Context, down *Down, meta []*Meta) *operation {
 		tmpod[i].meta = meta[i]
 		tmpod[i].config = down
 	}
+	operat.config = down
 	operat.od = tmpod
 
 	if down.Timeout != 0 {
@@ -75,7 +76,7 @@ func (operat *operation) start() error {
 		return err
 	}
 
-	go operat.sendStat(operat.getConnectCount)
+	go operat.sendStat()
 
 	operat.startOD(operat.ctx)
 	return nil
@@ -164,6 +165,15 @@ func (operat *operation) getConnectCount() int {
 	return tmp
 }
 
+// getOutpath 获取输出路径
+func (operat *operation) getOutpath() []string {
+	tmp := make([]string, len(operat.od))
+	for id, v := range operat.od {
+		tmp[id] = v.outpath
+	}
+	return tmp
+}
+
 // initOD 初始化
 func (operat *operation) initOD(ctx context.Context) error {
 	var err error
@@ -184,16 +194,13 @@ func (operat *operation) startOD(ctx context.Context) {
 }
 
 // sendStat 下载资源途中对数据的处理和发送 Hook
-func (operat *operation) sendStat(connectCountFunc func() int) {
+func (operat *operation) sendStat() {
 	oldCompletedLength := operat.getCompletedLength()
 	ratio := float64(time.Second) / float64(operat.config.SendTime)
 	for {
 		select {
 		case <-time.After(operat.config.SendTime):
-			connections := 1
-			if connectCountFunc != nil {
-				connections = connectCountFunc()
-			}
+			connections := operat.getConnectCount()
 			completedLength := operat.getCompletedLength()
 			// 下载速度
 			differ := completedLength - oldCompletedLength

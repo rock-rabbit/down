@@ -19,28 +19,14 @@ import (
 func TestDown(t *testing.T) {
 
 	meta := down.NewMeta("http://127.0.0.1:25427/down.bin", "./tmp", "")
+	meta2 := down.NewMeta("http://127.0.0.1:25427/down.bin", "./tmp", "down2.bin")
+
 	down.Default.AddHook(down.DefaultBarHook)
 
 	t.Run("单线程-正常下载", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		go rundownserve(t, ctx)
+		defer testserver(t, 0)()
 
 		down.Default.ThreadCount = 1
-
-		path, err := down.Default.Run(meta)
-		if err != nil {
-			log.Panic(err)
-		}
-		fmt.Println("文件下载完成：" + path)
-	})
-
-	t.Run("多线程-正常下载", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		go rundownserve(t, ctx)
-
-		down.Default.ThreadCount = 5
 
 		path, err := down.Default.Run(meta)
 		if err != nil {
@@ -50,9 +36,7 @@ func TestDown(t *testing.T) {
 	})
 
 	t.Run("单线程-下载中途失败", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
-		defer cancel()
-		go rundownserve(t, ctx)
+		defer testserver(t, time.Second*1)()
 
 		down.Default.ThreadCount = 1
 
@@ -64,12 +48,34 @@ func TestDown(t *testing.T) {
 		log.Panic("文件下载完成：" + path)
 	})
 
-	t.Run("多线程-下载中途失败", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
-		defer cancel()
-		go rundownserve(t, ctx)
+	t.Run("单线程-正常合并下载", func(t *testing.T) {
+		defer testserver(t, 0)()
 
-		down.Default.ThreadCount = 5
+		down.Default.ThreadCount = 1
+
+		path, err := down.Default.RunMerging([]*down.Meta{meta, meta2})
+		if err != nil {
+			log.Panic(err)
+		}
+		fmt.Println("文件下载完成：", path)
+	})
+
+	t.Run("多线程-正常下载", func(t *testing.T) {
+		defer testserver(t, 0)()
+
+		down.Default.ThreadCount = 3
+
+		path, err := down.Default.Run(meta)
+		if err != nil {
+			log.Panic(err)
+		}
+		fmt.Println("文件下载完成：" + path)
+	})
+
+	t.Run("多线程-下载中途失败", func(t *testing.T) {
+		defer testserver(t, time.Second*1)()
+
+		down.Default.ThreadCount = 3
 
 		path, err := down.Default.Run(meta)
 		if err != nil {
@@ -79,9 +85,34 @@ func TestDown(t *testing.T) {
 		log.Panic("文件下载完成：" + path)
 	})
 
+	t.Run("多线程-正常合并下载", func(t *testing.T) {
+		defer testserver(t, 0)()
+
+		down.Default.ThreadCount = 3
+
+		path, err := down.Default.RunMerging([]*down.Meta{meta, meta2})
+		if err != nil {
+			log.Panic(err)
+		}
+		fmt.Println("文件下载完成：", path)
+	})
+
 }
 
-func rundownserve(t *testing.T, ctx context.Context) {
+func testserver(t *testing.T, timeout time.Duration) func() {
+	ctx, cancel := context.WithCancel(context.Background())
+	if timeout != 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), timeout)
+	}
+	done := make(chan bool)
+	go rundownserve(t, ctx, done)
+	return func() {
+		cancel()
+		<-done
+	}
+}
+
+func rundownserve(t *testing.T, ctx context.Context, done chan bool) {
 
 	size := 1024 << 17
 
@@ -134,10 +165,11 @@ func rundownserve(t *testing.T, ctx context.Context) {
 
 	go serve.ListenAndServe()
 
-	select {
-	case <-ctx.Done():
-		serve.Close()
-	}
+	<-ctx.Done()
+
+	serve.Close()
+
+	done <- true
 
 }
 

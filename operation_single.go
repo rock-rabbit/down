@@ -11,6 +11,8 @@ func (od *operatDown) single(ctx context.Context) {
 	// 自动处理
 	go od.operatFile.operatCF.autoSave(od.config.AutoSaveTnterval)
 	// 执行下载任务
+	od.wgpool.Add()
+	defer od.wgpool.Done()
 	od.operatFile.operatCF.addTreadblock(0, 0, od.filesize-1)
 	res, err := od.defaultDo(ctx, nil)
 	if err != nil {
@@ -33,6 +35,9 @@ func (od *operatDown) single(ctx context.Context) {
 func (od *operatDown) singleBreakpoint(ctx context.Context) {
 	// 自动处理
 	go od.operatFile.operatCF.autoSave(od.config.AutoSaveTnterval)
+	// 执行下载任务
+	od.wgpool.Add()
+	defer od.wgpool.Done()
 	// 已分配的数据块
 	var (
 		err      error
