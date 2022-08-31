@@ -128,6 +128,11 @@ func SetRetryNumber(n int) {
 	std.SetRetryNumber(n)
 }
 
+// SetRetryTime 重试时的间隔时间
+func SetRetryTime(n time.Duration) {
+	std.SetRetryTime(n)
+}
+
 // SetProxy 设置 Http 代理
 func SetProxy(n func(*http.Request) (*url.URL, error)) {
 	std.SetProxy(n)

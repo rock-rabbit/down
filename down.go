@@ -240,6 +240,13 @@ func (down *Down) SetRetryNumber(n int) {
 	down.RetryNumber = n
 }
 
+// SetRetryTime 重试时的间隔时间
+func (down *Down) SetRetryTime(n time.Duration) {
+	down.mux.Lock()
+	defer down.mux.Unlock()
+	down.RetryTime = n
+}
+
 // SetProxy 设置 Http 代理
 func (down *Down) SetProxy(n func(*http.Request) (*url.URL, error)) {
 	down.mux.Lock()
