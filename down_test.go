@@ -27,12 +27,7 @@ func TestDown(t *testing.T) {
 	}
 
 	remove := func() {
-		os.Remove("./tmp/down0.bin")
-		os.Remove("./tmp/down1.bin")
-		os.Remove("./tmp/down2.bin")
-		os.Remove("./tmp/down0.bin.down")
-		os.Remove("./tmp/down1.bin.down")
-		os.Remove("./tmp/down2.bin.down")
+		os.RemoveAll("./tmp")
 	}
 
 	down.AddHook(down.DefaultBarHook)

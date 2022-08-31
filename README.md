@@ -150,7 +150,7 @@ func main(){
 }
 
 // 运行后输出:
-// 文件下载完成：/Users/rockrabbit/projects/down/tmp/100MB
+// 文件下载完成：/Users/rockrabbit/projects/down/tmp/100MB.bin
 ```
 
 自定义下载器
