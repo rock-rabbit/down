@@ -11,16 +11,14 @@
 - 覆盖下载
 - 磁盘缓冲区
 - 断点续传
+- 多文件同时下载
 
 ## 📝 进行中
-- 性能分析
-- 性能调优
+- 写文档
 
 ## 🏍️ 计划
 - 限速下载
-- 性能分析
 - 文件自动重命名
-- 多文件同时下载
 - 生命周期 HOOK
 
 ## 🎊 安装
@@ -36,47 +34,79 @@ go get github.com/rock-rabbit/down
 ![演示](https://www.68wu.cn/down/demonstration2.gif)
 ## 🛠 使用方法
 
+最简单的使用方法, 默认会下载到运行目录
 ``` golang
 package main
 
 import "github.com/rock-rabbit/down"
 
 func main(){
-	// 创建一个基本下载信息
-	meta := down.NewMeta("http://downloadtest.kdatacenter.com/100MB", "./tmp", "")
-	// 添加一个请求头
-	meta.Header.Set("referer", "https://im.qq.com/")
-	// down.Default 为默认配置的下载器, 你可以查看 Down 结构体配置自己的下载器
-	down.Default.AddHook(down.DefaultBarHook)
-	// down.Default.ThreadSize = 1024 << 10
-	down.Default.ThreadCount = 1
-	// 执行下载, 你也可以使用 RunContext 传递一个 Context
-	path, err := down.Default.Run(meta)
+	// 执行下载，下载完成后返回 文件存储路径 和 错误信息
+	path, err := down.Run("http://downloadtest.kdatacenter.com/100MB")
 	if err != nil {
 		log.Panic(err)
 	}
-	fmt.Println("文件下载完成：" + path)
+	fmt.Println("文件下载完成：", path)
 }
+// 默认输出目录为 ./，运行后输出:
+// 文件下载完成：/Users/rockrabbit/projects/down/tmp/100MB
 ```
+简单的使用命令行进度条 Hook
+``` golang
+	// 给默认下载器添加进度条 Hook，这是一个全局操作
+	down.AddHook(down.DefaultBarHook)
+
+	path, err := down.Run("http://downloadtest.kdatacenter.com/100MB")
+	if err != nil {
+		log.Panic(err)
+	}
+	fmt.Println("文件下载完成：", path)
+// 运行后输出:
+// 100.00 MB / 100.00 MB [================================] 100% 12.06 MB/s 0s CN:1
+// 文件下载完成：/Users/rockrabbit/projects/down/tmp/down0.bin
+```
+简单的多文件同时下载
+``` golang
+	// 给默认下载器添加进度条 Hook，这是一个全局操作
+	down.AddHook(down.DefaultBarHook)
+
+	metaMerging := [][2]string{
+		{"http://downloadtest.kdatacenter.com/100MB", "down1.bin"},
+		{"http://downloadtest.kdatacenter.com/100MB", "down2.bin"},
+	}
+	path, err := down.RunMerging(metaMerging, "./")
+	if err != nil {
+		log.Panic(err)
+	}
+	fmt.Println("文件下载完成：", path)
+// 运行后输出:
+// 200.00 MB / 200.00 MB [================================] 100% 12.06 MB/s 0s CN:2
+// 文件下载完成：[/Users/rockrabbit/projects/down/tmp/down1.bin /Users/rockrabbit/projects/down/tmp/down2.bin]
+```
+
 
 ## 🔗 目录结构
 ```
 .
-├── LICENSE         开源协议 MIT
-├── Makefile        快捷命令
-├── README.md       说明文件
-├── bar_hook.go     控制台进度条 Hook
-├── controlfile.go  控制文件
-├── down.go         下载器配置
+├── LICENSE                   开源协议 MIT
+├── Makefile                  快捷命令
+├── README.md                 说明文件
+├── bar_hook.go               控制台进度条 Hook
+├── down.go                   下载器配置
+├── export.go                 面向外部的快捷方法
 ├── go.mod
-├── hook.go         定义 Hook 接口
-├── meta.go         基本下载信息
-├── mime.go         识别文件头
-├── operation.go    具体的下载实现
-├── pool.go         线程池
-├── rate.go         限流器
-├── request.go      网络请求
-└── utils.go        一些工具
+├── hook.go                   Hook 接口
+├── meta.go                   基本下载信息
+├── mime.go
+├── operation.go              具体的下载实现
+├── operation_controlfile.go  控制文件
+├── operation_down.go         具体的下载实现
+├── operation_file.go         操作文件
+├── operation_multith.go      多线程下载实现
+├── operation_single.go       单线程下载实现
+├── pool.go                   线程池
+├── rate.go                   限流器
+└── utils.go                  一些工具
 ```
 
 

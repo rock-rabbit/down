@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"testing"
@@ -18,17 +19,31 @@ import (
 
 func TestDown(t *testing.T) {
 
-	meta := down.NewMeta("http://127.0.0.1:25427/down.bin", "./tmp", "")
-	meta2 := down.NewMeta("http://127.0.0.1:25427/down.bin", "./tmp", "down2.bin")
+	outpath := "./tmp"
+	meta := []string{"http://127.0.0.1:25427/down.bin", outpath, "down0.bin"}
+	metaMerging := [][2]string{
+		{"http://127.0.0.1:25427/down.bin", "down1.bin"},
+		{"http://127.0.0.1:25427/down.bin", "down2.bin"},
+	}
 
-	down.Default.AddHook(down.DefaultBarHook)
+	remove := func() {
+		os.Remove("./tmp/down0.bin")
+		os.Remove("./tmp/down1.bin")
+		os.Remove("./tmp/down2.bin")
+		os.Remove("./tmp/down0.bin.down")
+		os.Remove("./tmp/down1.bin.down")
+		os.Remove("./tmp/down2.bin.down")
+	}
+
+	down.AddHook(down.DefaultBarHook)
 
 	t.Run("单线程-正常下载", func(t *testing.T) {
+		defer remove()
 		defer testserver(t, 0)()
 
-		down.Default.ThreadCount = 1
+		down.SetThreadCount(1)
 
-		path, err := down.Default.Run(meta)
+		path, err := down.Run(meta...)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -36,11 +51,12 @@ func TestDown(t *testing.T) {
 	})
 
 	t.Run("单线程-下载中途失败", func(t *testing.T) {
+		defer remove()
 		defer testserver(t, time.Second*1)()
 
-		down.Default.ThreadCount = 1
+		down.SetThreadCount(1)
 
-		path, err := down.Default.Run(meta)
+		path, err := down.Run(meta...)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -49,11 +65,12 @@ func TestDown(t *testing.T) {
 	})
 
 	t.Run("单线程-正常合并下载", func(t *testing.T) {
+		defer remove()
 		defer testserver(t, 0)()
 
-		down.Default.ThreadCount = 1
+		down.SetThreadCount(1)
 
-		path, err := down.Default.RunMerging([]*down.Meta{meta, meta2})
+		path, err := down.RunMerging(metaMerging, outpath)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -61,11 +78,12 @@ func TestDown(t *testing.T) {
 	})
 
 	t.Run("多线程-正常下载", func(t *testing.T) {
+		defer remove()
 		defer testserver(t, 0)()
 
-		down.Default.ThreadCount = 3
+		down.SetThreadCount(3)
 
-		path, err := down.Default.Run(meta)
+		path, err := down.Run(meta...)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -73,11 +91,12 @@ func TestDown(t *testing.T) {
 	})
 
 	t.Run("多线程-下载中途失败", func(t *testing.T) {
+		defer remove()
 		defer testserver(t, time.Second*1)()
 
-		down.Default.ThreadCount = 3
+		down.SetThreadCount(3)
 
-		path, err := down.Default.Run(meta)
+		path, err := down.Run(meta...)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -86,11 +105,12 @@ func TestDown(t *testing.T) {
 	})
 
 	t.Run("多线程-正常合并下载", func(t *testing.T) {
+		defer remove()
 		defer testserver(t, 0)()
 
-		down.Default.ThreadCount = 3
+		down.SetThreadCount(3)
 
-		path, err := down.Default.RunMerging([]*down.Meta{meta, meta2})
+		path, err := down.RunMerging(metaMerging, outpath)
 		if err != nil {
 			log.Panic(err)
 		}

@@ -56,8 +56,25 @@ func NewMeta(uri, outputDir, outputName string) *Meta {
 	}
 }
 
-// copy 在执行下载前，会拷贝 Meta
-func (meta *Meta) copy() *Meta {
+// SimpleMeta 用简单的方式创建一个 Meta
+func SimpleMeta(s ...string) *Meta {
+	var uri, outpath, filename string
+	switch len(s) {
+	case 1:
+		uri = s[0]
+	case 2:
+		uri = s[0]
+		outpath = s[1]
+	default:
+		uri = s[0]
+		outpath = s[1]
+		filename = s[2]
+	}
+	return NewMeta(uri, outpath, filename)
+}
+
+// Copy 在执行下载前，会拷贝 Meta
+func (meta *Meta) Copy() *Meta {
 	tmpMeta := *meta
 
 	header := make(http.Header, len(meta.Header))
