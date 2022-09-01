@@ -53,14 +53,16 @@ func (of *operatFile) iocopy(src io.Reader, start int64, blockid, dataSize int) 
 	}
 	// 新建硬盘缓冲区写入
 	ofat := of.makeFileAt(blockid, start)
-	readerSend := func(n int) {
-		atomic.AddInt64(of.cl, int64(n))
-	}
-	_, err := io.CopyBuffer(ofat, &ioProxyReader{reader: src, send: readerSend}, make([]byte, bufSize))
+	_, err := io.CopyBuffer(ofat, &IoProxyReader{Reader: src, Send: of.addcl}, make([]byte, bufSize))
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// addcl 新增进度
+func (of *operatFile) addcl(n int) {
+	atomic.AddInt64(of.cl, int64(n))
 }
 
 // close 关闭文件

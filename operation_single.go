@@ -8,8 +8,6 @@ func (od *operatDown) single(ctx context.Context) {
 		od.finish(err)
 		return
 	}
-	// 自动处理
-	go od.operatFile.operatCF.autoSave(od.config.AutoSaveTnterval)
 	// 执行下载任务
 	od.wgpool.Add()
 	defer od.wgpool.Done()
@@ -33,8 +31,6 @@ func (od *operatDown) single(ctx context.Context) {
 
 // singleBreakpoint 单线程，断点续传
 func (od *operatDown) singleBreakpoint(ctx context.Context) {
-	// 自动处理
-	go od.operatFile.operatCF.autoSave(od.config.AutoSaveTnterval)
 	// 执行下载任务
 	od.wgpool.Add()
 	defer od.wgpool.Done()

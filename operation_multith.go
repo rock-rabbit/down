@@ -9,8 +9,6 @@ func (od *operatDown) multith(ctx context.Context) {
 		return
 	}
 	task := threadTaskSplit(0, od.filesize, int64(od.config.ThreadSize))
-	// 自动处理
-	go od.operatFile.operatCF.autoSave(od.config.AutoSaveTnterval)
 	// 执行多线程任务
 	go od.startMultith(ctx, task)
 	// 阻塞等待所有线程完成后返回结果
@@ -59,8 +57,6 @@ func (od *operatDown) multithSingle(ctx context.Context, id int, start, end, com
 
 // multithBreakpoint 多线程，断点续传
 func (od *operatDown) multithBreakpoint(ctx context.Context) {
-	// 自动处理
-	go od.operatFile.operatCF.autoSave(od.config.AutoSaveTnterval)
 	// 执行多线程任务
 	go od.startMultithBreakpoint(ctx)
 	// 阻塞等待所有线程完成后返回结果

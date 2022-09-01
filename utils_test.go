@@ -117,8 +117,8 @@ func TestIoProxyReader(t *testing.T) {
 
 		testReader := io.NopCloser(bytes.NewBuffer([]byte(testStr)))
 		lenght := 0
-		ioproxy := &ioProxyReader{reader: testReader}
-		ioproxy.send = func(n int) {
+		ioproxy := &IoProxyReader{Reader: testReader}
+		ioproxy.Send = func(n int) {
 			lenght += n
 		}
 		ioproxy.Close()
@@ -137,8 +137,8 @@ func TestIoProxyReader(t *testing.T) {
 
 		testReader := bytes.NewBuffer([]byte(testStr))
 		lenght := 0
-		ioproxy := &ioProxyReader{reader: testReader}
-		ioproxy.send = func(n int) {
+		ioproxy := &IoProxyReader{Reader: testReader}
+		ioproxy.Send = func(n int) {
 			lenght += n
 		}
 		ioproxy.Close()

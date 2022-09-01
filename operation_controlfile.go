@@ -95,6 +95,9 @@ func (ocf *operatCF) check(perm fs.FileMode) (bool, error) {
 
 // addTreadblock 添加数据块
 func (ocf *operatCF) addTreadblock(completed, start, end int64) int {
+	if ocf.file == nil {
+		return 0
+	}
 	ocf.mux.Lock()
 	defer ocf.mux.Unlock()
 	ocf.cf.threadblock = append(ocf.cf.threadblock, &threadblock{
@@ -108,6 +111,9 @@ func (ocf *operatCF) addTreadblock(completed, start, end int64) int {
 
 // addCompleted 添加数据块已完成的数据量
 func (ocf *operatCF) addCompleted(key int, completed int64) {
+	if ocf.file == nil {
+		return
+	}
 	ocf.mux.Lock()
 	defer ocf.mux.Unlock()
 	ocf.cf.threadblock[key].completed = completed
@@ -133,6 +139,9 @@ func (ocf *operatCF) autoSave(d time.Duration) {
 
 // save 保存控制文件
 func (ocf *operatCF) save() {
+	if ocf.file == nil {
+		return
+	}
 	// 防止系统崩溃导致的数据丢失，下载的文件需要强制刷入到磁盘
 	ocf.file.Seek(0, 0)
 	io.Copy(ocf.file, ocf.cf.encoding())

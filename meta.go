@@ -45,6 +45,8 @@ func NewMeta(uri, outputDir, outputName string) *Meta {
 		header[k] = v
 	}
 
+	header.Set("referer", uri)
+
 	return &Meta{
 		URI:        uri,
 		OutputName: outputName,

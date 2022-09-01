@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"testing"
@@ -31,6 +32,25 @@ func TestDown(t *testing.T) {
 	}
 
 	down.AddHook(down.DefaultBarHook)
+
+	t.Run("关闭断点续传", func(t *testing.T) {
+		defer remove()
+		defer testserver(t, time.Second*1)()
+
+		down.SetThreadCount(2)
+		down.SetContinue(false)
+
+		path, err := down.Run(meta...)
+		if err != nil {
+			tmppath := filepath.Join(path, ".down")
+			_, err := os.Stat(tmppath)
+			if !os.IsNotExist(err) {
+				log.Panic("关闭断点续传后，临时文件还存在")
+			}
+			return
+		}
+		log.Panic("文件下载成功了，应该断开连接下载失败才对")
+	})
 
 	t.Run("单线程-正常下载", func(t *testing.T) {
 		defer remove()
@@ -166,7 +186,7 @@ func rundownserve(t *testing.T, ctx context.Context, done chan bool) {
 			w.Header().Add("Content-Length", fmt.Sprint(size))
 			buf = bytes.NewBuffer(make([]byte, size))
 		}
-		io.Copy(w, &ioProxyReader{reader: bufio.NewReaderSize(buf, 1024), send: func(n int) {
+		io.Copy(w, &down.IoProxyReader{Reader: bufio.NewReaderSize(buf, 1024), Send: func(n int) {
 			time.Sleep(time.Duration(time.Millisecond) * 1)
 		}})
 	})
@@ -186,25 +206,4 @@ func rundownserve(t *testing.T, ctx context.Context, done chan bool) {
 
 	done <- true
 
-}
-
-// ioProxyReader 代理 io 读
-type ioProxyReader struct {
-	reader io.Reader
-	send   func(n int)
-}
-
-// Read 读
-func (r *ioProxyReader) Read(p []byte) (n int, err error) {
-	n, err = r.reader.Read(p)
-	r.send(n)
-	return n, err
-}
-
-// Close the wrapped reader when it implements io.Closer
-func (r *ioProxyReader) Close() (err error) {
-	if closer, ok := r.reader.(io.Closer); ok {
-		return closer.Close()
-	}
-	return
 }

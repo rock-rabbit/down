@@ -101,6 +101,11 @@ func (od *operatDown) start(ctx context.Context) {
 }
 
 func (od *operatDown) electe(ctx context.Context) {
+	// 当开启断点续传时，自动保存控制文件
+	if od.config.Continue {
+		go od.operatFile.operatCF.autoSave(od.config.AutoSaveTnterval)
+	}
+
 	// 单线程下载逻辑
 	if !od.multithread || od.config.ThreadCount <= 1 {
 		if od.breakpoint {
@@ -117,10 +122,13 @@ func (od *operatDown) electe(ctx context.Context) {
 	} else {
 		od.multith(ctx)
 	}
+
 }
 
 // finish 下载完成
 func (od *operatDown) finish(err error) {
+	// 保存控制文件
+	od.operatFile.operatCF.save()
 	// 释放资源
 	od.close()
 	od.operatFile.close()
@@ -169,7 +177,7 @@ func (od *operatDown) check(ctx context.Context) error {
 	}
 
 	// 检查到不需要断点续传，新建控制文件
-	if !od.breakpoint {
+	if !od.breakpoint && od.config.Continue {
 		err = operatCF.open(od.meta.Perm)
 		if err != nil {
 			return err

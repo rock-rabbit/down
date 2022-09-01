@@ -93,22 +93,22 @@ func fileExist(path string) bool {
 	return !os.IsNotExist(err)
 }
 
-// ioProxyReader 代理 io 读
-type ioProxyReader struct {
-	reader io.Reader
-	send   func(n int)
+// IoProxyReader 代理 io 读
+type IoProxyReader struct {
+	Reader io.Reader
+	Send   func(n int)
 }
 
 // Read 读
-func (r *ioProxyReader) Read(p []byte) (n int, err error) {
-	n, err = r.reader.Read(p)
-	r.send(n)
+func (r *IoProxyReader) Read(p []byte) (n int, err error) {
+	n, err = r.Reader.Read(p)
+	r.Send(n)
 	return n, err
 }
 
 // Close the wrapped reader when it implements io.Closer
-func (r *ioProxyReader) Close() (err error) {
-	if closer, ok := r.reader.(io.Closer); ok {
+func (r *IoProxyReader) Close() (err error) {
+	if closer, ok := r.Reader.(io.Closer); ok {
 		return closer.Close()
 	}
 	return
