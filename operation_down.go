@@ -157,11 +157,7 @@ func (od *operatDown) check(ctx context.Context) error {
 	}
 
 	// 文件位置
-	outputName := od.meta.OutputName
-	if outputName == "" {
-		outputName = od.filename
-	}
-	od.outpath, err = filepath.Abs(filepath.Join(od.meta.OutputDir, outputName))
+	od.outpath, err = filepath.Abs(filepath.Join(od.meta.OutputDir, od.filename))
 	if err != nil {
 		return err
 	}
@@ -264,8 +260,12 @@ func (od *operatDown) checkMultith(ctx context.Context) error {
 		}
 	}
 
-	// 自动获取文件名称
-	od.filename = getFileName(od.meta.URI, contentDisposition, contentType, headinfo)
+	if od.meta.OutputName == "" {
+		// 自动获取文件名称
+		od.filename = getFileName(od.meta.URI, contentDisposition, contentType, headinfo)
+	} else {
+		od.filename = od.meta.OutputName
+	}
 
 	return nil
 }
