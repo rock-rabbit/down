@@ -4,20 +4,20 @@
 零依赖，高性能，可扩展，结构清晰的 HTTP 文件下载器 Golang 包
 
 ## 🎉 功能
-- HOOK
-- 命令行进度条 HOOK
 - 多线程下载
 - 单线程下载
 - 覆盖下载
+- 限速下载
+- 多文件同时下载
 - 磁盘缓冲区
 - 断点续传
-- 多文件同时下载
+- HOOK
+- 命令行进度条 HOOK
 
 ## 📝 进行中
 - 写文档
 
 ## 🏍️ 计划
-- 限速下载
 - 文件自动重命名
 - 生命周期 HOOK
 
@@ -173,6 +173,9 @@ fmt.Println("文件下载完成：", path)
 
 下载器的设置
 ``` golang
+// SetSpeedLimit 设置限速，每秒下载字节，默认为 0 不限速
+down.SetSpeedLimit(n int)
+
 // SetSendTime 设置给 Hook 发送下载进度的间隔时间，默认为 500ms
 down.SetSendTime(n time.Duration)
 

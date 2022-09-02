@@ -2,6 +2,7 @@ package down
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -57,6 +58,7 @@ var (
 	ErrorDefault       = "down error: %v"
 	ErrorFileExist     = "已存在文件 %s，若允许替换文件请将 down.AllowOverwrite 设为 true"
 	ErrorRequestStatus = "%s HTTP Status Code %d"
+	ErrInvalidWrite    = errors.New("invalid write result")
 )
 
 // New 创建一个默认的下载器
@@ -168,6 +170,13 @@ func (down *Down) SetSendTime(n time.Duration) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
 	down.SendTime = n
+}
+
+// SetSpeedLimit 设置限速，每秒下载字节
+func (down *Down) SetSpeedLimit(n int) {
+	down.mux.Lock()
+	defer down.mux.Unlock()
+	down.SpeedLimit = n
 }
 
 // SetThreadCount 设置多线程时的最大线程数

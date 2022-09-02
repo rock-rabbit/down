@@ -183,10 +183,11 @@ func (od *operatDown) check(ctx context.Context) error {
 	}
 
 	// 创建操作文件
-	od.operatFile, err = newOperatFile(ctx, operatCF, od.outpath, od.cl, od.config.DiskCache, od.meta.Perm)
+	od.operatFile, err = newOperatFile(ctx, operatCF, od.outpath, od.cl, od.config.DiskCache, od.meta.Perm, od.config.SpeedLimit)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 

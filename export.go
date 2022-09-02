@@ -108,6 +108,11 @@ func SetContinue(n bool) {
 	std.SetContinue(n)
 }
 
+// SetSpeedLimit 设置限速，每秒下载字节
+func SetSpeedLimit(n int) {
+	std.SetSpeedLimit(n)
+}
+
 // SetAutoSaveTnterval 设置自动保存控制文件的时间
 func SetAutoSaveTnterval(n time.Duration) {
 	std.SetAutoSaveTnterval(n)

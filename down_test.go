@@ -33,6 +33,22 @@ func TestDown(t *testing.T) {
 
 	down.AddHook(down.DefaultBarHook)
 
+	t.Run("限速下载", func(t *testing.T) {
+		defer remove()
+		defer testserver(t, 0)()
+		defer down.SetSpeedLimit(0)
+
+		down.SetThreadCount(1)
+		down.SetContinue(false)
+		down.SetSpeedLimit(1024 << 13)
+
+		path, err := down.Run(meta...)
+		if err != nil {
+			log.Panic(err)
+		}
+		fmt.Println("文件下载完成：" + path)
+	})
+
 	t.Run("关闭断点续传", func(t *testing.T) {
 		defer remove()
 		defer testserver(t, time.Second*1)()
@@ -194,8 +210,8 @@ func rundownserve(t *testing.T, ctx context.Context, done chan bool) {
 	serve := &http.Server{
 		Addr:         ":25427",
 		Handler:      handmux,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 5 * time.Second,
+		ReadTimeout:  500 * time.Second,
+		WriteTimeout: 500 * time.Second,
 	}
 
 	go serve.ListenAndServe()
