@@ -12,40 +12,40 @@ import (
 
 // Down 下载器，请求配置和 Hook 信息
 type Down struct {
-	// PerHooks 是返回下载进度的钩子，默认为空
-	PerHooks []PerHook
-	// SendTime 给 Hook 发送下载进度的间隔时间，默认为 500ms
-	SendTime time.Duration
-	// ThreadCount 多线程下载时最多同时下载一个文件的最大线程，默认为 1
-	ThreadCount int
-	// ThreadSize 多线程下载时每个线程下载的大小，每个线程都会有一个自己下载大小的缓冲区，默认为 20M
-	ThreadSize int
-	// DiskCache 磁盘缓冲区大小，默认为 16M
-	DiskCache int
-	// SpeedLimit 下载速度限制，默认为 0 无限制
-	SpeedLimit int
-	// CreateDir 当需要创建目录时，是否创建目录，默认为 true
-	CreateDir bool
-	// AllowOverwrite 是否允许覆盖文件，默认为 true
-	AllowOverwrite bool
-	// AutoFileRenaming 文件自动重命名，新文件名在名称之后扩展名之前加上一个点和一个数字（1..9999）。默认:true
-	AutoFileRenaming bool
-	// Continue 是否启用断点续传，默认为 true
-	Continue bool
-	// AutoSaveTnterval 自动保存控制文件的时间，默认为 1 秒
-	AutoSaveTnterval time.Duration
-	// ConnectTimeout HTTP 连接请求的超时时间，默认为 5 秒
-	ConnectTimeout time.Duration
-	// Timeout 下载总超时时间，默认为 10 分钟
-	Timeout time.Duration
-	// RetryNumber 最多重试次数，默认为 5
-	RetryNumber int
-	// RetryTime 重试时的间隔时间，默认为 0
-	RetryTime time.Duration
-	// Proxy Http 代理设置，默认为 http.ProxyFromEnvironment
-	Proxy func(*http.Request) (*url.URL, error)
-	// TempFileExt 临时文件后缀, 默认为 down
-	TempFileExt string
+	// perHooks 是返回下载进度的钩子，默认为空
+	perHooks []PerHook
+	// sendTime 给 Hook 发送下载进度的间隔时间，默认为 500ms
+	sendTime time.Duration
+	// threadCount 多线程下载时最多同时下载一个文件的最大线程，默认为 1
+	threadCount int
+	// threadSize 多线程下载时每个线程下载的大小，每个线程都会有一个自己下载大小的缓冲区，默认为 20M
+	threadSize int
+	// diskCache 磁盘缓冲区大小，默认为 16M
+	diskCache int
+	// speedLimit 下载速度限制，默认为 0 无限制
+	speedLimit int
+	// createDir 当需要创建目录时，是否创建目录，默认为 true
+	createDir bool
+	// allowOverwrite 是否允许覆盖文件，默认为 true
+	allowOverwrite bool
+	// autoFileRenaming 文件自动重命名，新文件名在名称之后扩展名之前加上一个点和一个数字（1..9999）。默认:true
+	autoFileRenaming bool
+	// continuew 是否启用断点续传，默认为 true
+	continuew bool
+	// autoSaveTnterval 自动保存控制文件的时间，默认为 1 秒
+	autoSaveTnterval time.Duration
+	// connectTimeout HTTP 连接请求的超时时间，默认为 5 秒
+	connectTimeout time.Duration
+	// timeout 下载总超时时间，默认为 10 分钟
+	timeout time.Duration
+	// retryNumber 最多重试次数，默认为 5
+	retryNumber int
+	// retryTime 重试时的间隔时间，默认为 0
+	retryTime time.Duration
+	// proxy Http 代理设置，默认为 http.ProxyFromEnvironment
+	proxy func(*http.Request) (*url.URL, error)
+	// tempFileExt 临时文件后缀, 默认为 down
+	tempFileExt string
 	// mux 锁
 	mux sync.Mutex
 }
@@ -64,23 +64,23 @@ var (
 // New 创建一个默认的下载器
 func New() *Down {
 	return &Down{
-		PerHooks:         make([]PerHook, 0),
-		SendTime:         time.Millisecond * 500,
-		ThreadCount:      1,
-		ThreadSize:       20971520,
-		DiskCache:        16777216,
-		SpeedLimit:       0,
-		CreateDir:        true,
-		AllowOverwrite:   true,
-		Continue:         true,
-		AutoFileRenaming: true,
-		AutoSaveTnterval: time.Second * 1,
-		ConnectTimeout:   time.Second * 5,
-		Timeout:          time.Minute * 10,
-		RetryNumber:      5,
-		RetryTime:        0,
-		Proxy:            http.ProxyFromEnvironment,
-		TempFileExt:      "down",
+		perHooks:         make([]PerHook, 0),
+		sendTime:         time.Millisecond * 500,
+		threadCount:      1,
+		threadSize:       20971520,
+		diskCache:        16777216,
+		speedLimit:       0,
+		createDir:        true,
+		allowOverwrite:   true,
+		continuew:        true,
+		autoFileRenaming: true,
+		autoSaveTnterval: time.Second * 1,
+		connectTimeout:   time.Second * 5,
+		timeout:          time.Minute * 10,
+		retryNumber:      5,
+		retryTime:        0,
+		proxy:            http.ProxyFromEnvironment,
+		tempFileExt:      "down",
 		mux:              sync.Mutex{},
 	}
 }
@@ -169,105 +169,105 @@ func (down *Down) RunMergingMetaContext(ctx context.Context, meta []*Meta) ([]st
 func (down *Down) SetSendTime(n time.Duration) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.SendTime = n
+	down.sendTime = n
 }
 
 // SetSpeedLimit 设置限速，每秒下载字节
 func (down *Down) SetSpeedLimit(n int) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.SpeedLimit = n
+	down.speedLimit = n
 }
 
 // SetThreadCount 设置多线程时的最大线程数
 func (down *Down) SetThreadCount(n int) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.ThreadCount = n
+	down.threadCount = n
 }
 
 // SetThreadCount 设置多线程时每个线程下载的最大长度
 func (down *Down) SetThreadSize(n int) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.ThreadSize = n
+	down.threadSize = n
 }
 
 // SetDiskCache 设置磁盘缓冲区大小
 func (down *Down) SetDiskCache(n int) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.DiskCache = n
+	down.diskCache = n
 }
 
 // SetDiskCache 设置当需要创建目录时，是否创建目录
 func (down *Down) SetCreateDir(n bool) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.CreateDir = n
+	down.createDir = n
 }
 
 // SetAllowOverwrite 设置是否允许覆盖文件
 func (down *Down) SetAllowOverwrite(n bool) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.AllowOverwrite = n
+	down.allowOverwrite = n
 }
 
 // SetContinue 设置是否启用断点续传
 func (down *Down) SetContinue(n bool) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.Continue = n
+	down.continuew = n
 }
 
 // SetAutoSaveTnterval 设置自动保存控制文件的时间
 func (down *Down) SetAutoSaveTnterval(n time.Duration) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.AutoSaveTnterval = n
+	down.autoSaveTnterval = n
 }
 
 // SetConnectTimeout 设置 HTTP 连接请求的超时时间
 func (down *Down) SetConnectTimeout(n time.Duration) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.ConnectTimeout = n
+	down.connectTimeout = n
 }
 
 // SetTimeout 设置下载总超时时间
 func (down *Down) SetTimeout(n time.Duration) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.Timeout = n
+	down.timeout = n
 }
 
 // SetRetryNumber 设置下载最多重试次数
 func (down *Down) SetRetryNumber(n int) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.RetryNumber = n
+	down.retryNumber = n
 }
 
 // SetRetryTime 重试时的间隔时间
 func (down *Down) SetRetryTime(n time.Duration) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.RetryTime = n
+	down.retryTime = n
 }
 
 // SetProxy 设置 Http 代理
 func (down *Down) SetProxy(n func(*http.Request) (*url.URL, error)) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.Proxy = n
+	down.proxy = n
 }
 
 // SetTempFileExt 设置临时文件后缀
 func (down *Down) SetTempFileExt(n string) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.TempFileExt = n
+	down.tempFileExt = n
 }
 
 // Copy 在执行下载前，会拷贝 Down
@@ -276,8 +276,8 @@ func (down *Down) Copy() *Down {
 	defer down.mux.Unlock()
 
 	tmpDown := *down
-	tmpDown.PerHooks = make([]PerHook, len(down.PerHooks))
-	copy(tmpDown.PerHooks, down.PerHooks)
+	tmpDown.perHooks = make([]PerHook, len(down.perHooks))
+	copy(tmpDown.perHooks, down.perHooks)
 
 	tmpDown.mux = sync.Mutex{}
 	return &tmpDown
@@ -287,7 +287,7 @@ func (down *Down) Copy() *Down {
 func (down *Down) AddHook(perhook PerHook) {
 	down.mux.Lock()
 	defer down.mux.Unlock()
-	down.PerHooks = append(down.PerHooks, perhook)
+	down.perHooks = append(down.perHooks, perhook)
 }
 
 // RunContext 基于 context 执行下载，阻塞等待完成

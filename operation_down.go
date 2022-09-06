@@ -71,11 +71,11 @@ func (od *operatDown) init(ctx context.Context) error {
 	od.client = &http.Client{
 		Transport: &http.Transport{
 			// 应用来自环境变量的代理
-			Proxy: od.config.Proxy,
+			Proxy: od.config.proxy,
 			// 要求服务器返回非压缩的内容，前提是没有发送 accept-encoding 来接管 transport 的自动处理
 			DisableCompression: true,
 			// 等待响应头的超时时间
-			ResponseHeaderTimeout: od.config.ConnectTimeout,
+			ResponseHeaderTimeout: od.config.connectTimeout,
 			// TLS 握手超时时间
 			TLSHandshakeTimeout: 10 * time.Second,
 			// 接受服务器提供的任何证书
@@ -86,7 +86,7 @@ func (od *operatDown) init(ctx context.Context) error {
 	}
 	od.cl = new(int64)
 	od.done = make(chan error)
-	od.wgpool = NewWaitGroupPool(od.config.ThreadCount)
+	od.wgpool = NewWaitGroupPool(od.config.threadCount)
 
 	// 检查远程资源和本地文件
 	if err := od.check(ctx); err != nil {
@@ -102,12 +102,12 @@ func (od *operatDown) start(ctx context.Context) {
 
 func (od *operatDown) electe(ctx context.Context) {
 	// 当开启断点续传时，自动保存控制文件
-	if od.config.Continue {
-		go od.operatFile.operatCF.autoSave(od.config.AutoSaveTnterval)
+	if od.config.continuew {
+		go od.operatFile.operatCF.autoSave(od.config.autoSaveTnterval)
 	}
 
 	// 单线程下载逻辑
-	if !od.multithread || od.config.ThreadCount <= 1 {
+	if !od.multithread || od.config.threadCount <= 1 {
 		if od.breakpoint {
 			od.singleBreakpoint(ctx)
 		} else {
@@ -161,7 +161,7 @@ func (od *operatDown) check(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	od.ctlpath = fmt.Sprintf("%s.%s", od.outpath, od.config.TempFileExt)
+	od.ctlpath = fmt.Sprintf("%s.%s", od.outpath, od.config.tempFileExt)
 
 	// 控制文件
 	operatCF := newOperatCF(ctx, od.ctlpath)
@@ -173,7 +173,7 @@ func (od *operatDown) check(ctx context.Context) error {
 	}
 
 	// 检查到不需要断点续传，新建控制文件
-	if !od.breakpoint && od.config.Continue {
+	if !od.breakpoint && od.config.continuew {
 		err = operatCF.open(od.meta.Perm)
 		if err != nil {
 			return err
@@ -183,7 +183,7 @@ func (od *operatDown) check(ctx context.Context) error {
 	}
 
 	// 创建操作文件
-	od.operatFile, err = newOperatFile(ctx, operatCF, od.outpath, od.cl, od.config.DiskCache, od.meta.Perm, od.config.SpeedLimit)
+	od.operatFile, err = newOperatFile(ctx, operatCF, od.outpath, od.cl, od.config.diskCache, od.meta.Perm, od.config.speedLimit)
 	if err != nil {
 		return err
 	}
@@ -199,11 +199,11 @@ func (od *operatDown) checkFile(operatCF *operatCF) error {
 	ctlexist := fileExist(od.ctlpath)
 
 	// 目录不存在时创建目录
-	if od.config.CreateDir && !fileExist(od.meta.OutputDir) {
+	if od.config.createDir && !fileExist(od.meta.OutputDir) {
 		os.MkdirAll(od.meta.OutputDir, os.ModePerm)
 	}
 
-	if od.multithread && outpathexist && od.config.Continue && ctlexist {
+	if od.multithread && outpathexist && od.config.continuew && ctlexist {
 		// 控制文件是否可以进行断点续传
 		ok, err := operatCF.check(od.meta.Perm)
 		if err != nil {
@@ -216,7 +216,7 @@ func (od *operatDown) checkFile(operatCF *operatCF) error {
 		}
 	}
 
-	if outpathexist && od.config.AllowOverwrite {
+	if outpathexist && od.config.allowOverwrite {
 		// 允许删除文件重新下载
 		err = os.Remove(od.outpath)
 		if err != nil {
@@ -334,7 +334,7 @@ func (od *operatDown) do(rsequest *http.Request) (*http.Response, error) {
 		res, requestError = od.client.Do(rsequest)
 		if requestError == nil && res.StatusCode < 400 {
 			break
-		} else if retryNum+1 >= od.config.RetryNumber {
+		} else if retryNum+1 >= od.config.retryNumber {
 			var err error
 			if requestError != nil {
 				err = requestError
@@ -343,7 +343,7 @@ func (od *operatDown) do(rsequest *http.Request) (*http.Response, error) {
 			}
 			return nil, err
 		}
-		time.Sleep(od.config.RetryTime)
+		time.Sleep(od.config.retryTime)
 	}
 	return res, nil
 

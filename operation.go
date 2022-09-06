@@ -56,8 +56,8 @@ func newOperation(ctx context.Context, down *Down, meta []*Meta) *operation {
 	operat.config = down
 	operat.od = tmpod
 
-	if down.Timeout != 0 {
-		operat.ctx, operat.close = context.WithTimeout(ctx, down.Timeout)
+	if down.timeout != 0 {
+		operat.ctx, operat.close = context.WithTimeout(ctx, down.timeout)
 	} else {
 		operat.ctx, operat.close = context.WithCancel(ctx)
 	}
@@ -104,9 +104,9 @@ func (operat *operation) finish(err error) {
 // makeHook 创建 Hook
 func (operat *operation) makeHook() error {
 	var err error
-	operat.hooks = make([]Hook, len(operat.config.PerHooks))
+	operat.hooks = make([]Hook, len(operat.config.perHooks))
 	stat := &Stat{Down: operat.config, Meta: operat.meta, TotalLength: operat.filesize}
-	for idx, perhook := range operat.config.PerHooks {
+	for idx, perhook := range operat.config.perHooks {
 		operat.hooks[idx], err = perhook.Make(stat)
 		if err != nil {
 			return fmt.Errorf("Make Hook: %s", err)
@@ -196,16 +196,16 @@ func (operat *operation) startOD(ctx context.Context) {
 // sendStat 下载资源途中对数据的处理和发送 Hook
 func (operat *operation) sendStat() {
 	oldCompletedLength := operat.getCompletedLength()
-	ratio := float64(time.Second) / float64(operat.config.SendTime)
+	ratio := float64(time.Second) / float64(operat.config.sendTime)
 	for {
 		select {
-		case <-time.After(operat.config.SendTime):
+		case <-time.After(operat.config.sendTime):
 			connections := operat.getConnectCount()
 			completedLength := operat.getCompletedLength()
 			// 下载速度
 			differ := completedLength - oldCompletedLength
 			downloadSpeed := differ
-			if operat.config.SendTime < time.Second || operat.config.SendTime > time.Second {
+			if operat.config.sendTime < time.Second || operat.config.sendTime > time.Second {
 				downloadSpeed = int64(float64(completedLength-oldCompletedLength) * ratio)
 			}
 			oldCompletedLength = completedLength

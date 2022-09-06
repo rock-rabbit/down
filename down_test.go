@@ -52,6 +52,7 @@ func TestDown(t *testing.T) {
 	t.Run("关闭断点续传", func(t *testing.T) {
 		defer remove()
 		defer testserver(t, time.Second*1)()
+		defer down.SetContinue(true)
 
 		down.SetThreadCount(2)
 		down.SetContinue(false)

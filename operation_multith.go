@@ -8,7 +8,7 @@ func (od *operatDown) multith(ctx context.Context) {
 		od.finish(err)
 		return
 	}
-	task := threadTaskSplit(0, od.filesize, int64(od.config.ThreadSize))
+	task := threadTaskSplit(0, od.filesize, int64(od.config.threadSize))
 	// 执行多线程任务
 	go od.startMultith(ctx, task)
 	// 阻塞等待所有线程完成后返回结果
@@ -90,7 +90,7 @@ func (od *operatDown) startMultithBreakpoint(ctx context.Context) {
 	// 未分配的任务块
 	threadblocklen := len(operatCF.cf.threadblock)
 	startsize := operatCF.cf.threadblock[threadblocklen-1].end + 1
-	for idx, task := range threadTaskSplit(startsize, od.filesize, int64(od.config.ThreadSize)) {
+	for idx, task := range threadTaskSplit(startsize, od.filesize, int64(od.config.threadSize)) {
 		od.wgpool.Add()
 		// 中途关闭
 		if contextDone(ctx) {

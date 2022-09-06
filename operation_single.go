@@ -20,7 +20,7 @@ func (od *operatDown) single(ctx context.Context) {
 	defer res.Body.Close()
 
 	// 写入文件
-	err = od.operatFile.iocopy(res.Body, 0, 0, od.config.DiskCache)
+	err = od.operatFile.iocopy(res.Body, 0, 0, od.config.diskCache)
 	if err != nil {
 		od.finish(err)
 		return
