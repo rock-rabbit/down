@@ -115,22 +115,23 @@ func (r *IoProxyReader) Close() (err error) {
 }
 
 // formatFileSize 字节的单位转换 保留两位小数
-func formatFileSize(fileSize int64) (size string) {
-	if fileSize < 0 {
+func formatFileSize(fileSize int64) string {
+	var sizef = float64(fileSize)
+	if sizef <= 0 {
 		return "0.00 B"
 	}
-	if fileSize < 1024 {
-		return fmt.Sprintf("%.2f B", float64(fileSize)/float64(1))
-	} else if fileSize < (1024 * 1024) {
-		return fmt.Sprintf("%.2f KB", float64(fileSize)/float64(1024))
-	} else if fileSize < (1024 * 1024 * 1024) {
-		return fmt.Sprintf("%.2f MB", float64(fileSize)/float64(1024*1024))
-	} else if fileSize < (1024 * 1024 * 1024 * 1024) {
-		return fmt.Sprintf("%.2f GB", float64(fileSize)/float64(1024*1024*1024))
-	} else if fileSize < (1024 * 1024 * 1024 * 1024 * 1024) {
-		return fmt.Sprintf("%.2f TB", float64(fileSize)/float64(1024*1024*1024*1024))
+	if sizef < 1024 {
+		return fmt.Sprintf("%.2f B", sizef/float64(1))
+	} else if sizef < 1048576 {
+		return fmt.Sprintf("%.2f KB", sizef/float64(1024))
+	} else if sizef < 1073741824 {
+		return fmt.Sprintf("%.2f MB", sizef/float64(1048576))
+	} else if sizef < 1099511627776 {
+		return fmt.Sprintf("%.2f GB", sizef/float64(1073741824))
+	} else if sizef < 1125899906842624 {
+		return fmt.Sprintf("%.2f TB", sizef/float64(1099511627776))
 	} else {
-		return fmt.Sprintf("%.2f EB", float64(fileSize)/float64(1024*1024*1024*1024*1024))
+		return fmt.Sprintf("%.2f EB", sizef/float64(1125899906842624))
 	}
 }
 

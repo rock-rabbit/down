@@ -182,6 +182,12 @@ func TestFormatFileSize(t *testing.T) {
 
 }
 
+func BenchmarkFormatFileSize(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		formatFileSize(1099511627776)
+	}
+}
+
 func TestThreadTaskSplit(t *testing.T) {
 	testData := []struct {
 		start, size, threadSize int64
@@ -209,6 +215,12 @@ func TestThreadTaskSplit(t *testing.T) {
 				t.Fatalf("size:%d threadSize:%d 任务分割失败, 输出 %v, 应输出 %v", v.size, v.threadSize, tmp, v.out)
 			}
 		}
+	}
+}
+
+func BenchmarkThreadTaskSplit(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		threadTaskSplit(1000, 2047, 1024)
 	}
 }
 
