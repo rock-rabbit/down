@@ -1,3 +1,4 @@
+## 本仓库更新已转移到 [rain](https://github.com/rock-rabbit/rain)
 
 ## 🎤 简介
 
